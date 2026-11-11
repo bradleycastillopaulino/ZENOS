@@ -6,11 +6,6 @@ on:
   push:
     tags: ["v*"]
   workflow_dispatch:
-    inputs:
-      tag:
-        description: "Versión a publicar (p. ej. v0.1.0)"
-        required: true
-        default: "v0.1.0"
 
 permissions:
   contents: write
@@ -45,10 +40,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: ${{ inputs.tag || github.ref_name }}
-          releaseName: "AI Star ${{ inputs.tag || github.ref_name }}"
+          tagName: ${{ github.ref_name }}
+          releaseName: "ZENOS ${{ github.ref_name }}"
           releaseBody: |
-            Descarga **AI Star_*_x64-setup.exe**, instálalo y configura tu proveedor de IA y tu clave API.
+            Descarga **ZENOS_*_x64-setup.exe**, instálalo y configura tu proveedor de IA y tu clave API.
             Consulta el README para más detalles.
           releaseDraft: false
           prerelease: false

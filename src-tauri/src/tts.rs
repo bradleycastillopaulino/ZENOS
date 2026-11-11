@@ -99,7 +99,7 @@ mod tests {
     fn windows_lists_voices_and_synthesizes_wav() {
         let voices = super::list().expect("listar voces");
         assert!(!voices.is_empty(), "Windows debe tener al menos una voz");
-        let wav = super::synthesize("Hola, soy AI Star.", "", "es", 1.0).expect("sintetizar");
+        let wav = super::synthesize("Hola, soy ZENOS.", "", "es", 1.0).expect("sintetizar");
         assert_eq!(&wav[0..4], b"RIFF");
         assert!(wav.len() > 4000, "audio demasiado corto: {}", wav.len());
     }

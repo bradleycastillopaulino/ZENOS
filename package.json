@@ -1,8 +1,8 @@
 {
-  "name": "ai-star",
+  "name": "zenos",
   "private": true,
   "version": "0.1.0",
-  "description": "AI Star - asistente de voz con IA para Windows",
+  "description": "ZENOS - asistente de voz con IA para Windows",
   "type": "module",
   "scripts": {
     "dev": "vite",

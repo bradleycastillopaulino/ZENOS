@@ -18,23 +18,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ai-star"
-version = "0.1.0"
-dependencies = [
- "cpal",
- "keyring",
- "reqwest 0.12.28",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-autostart",
- "tauri-plugin-global-shortcut",
- "tauri-plugin-single-instance",
- "windows 0.62.2",
-]
-
-[[package]]
 name = "alloc-no-stdlib"
 version = "3.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5704,6 +5687,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "939f186d9ecebe044315a5cb6d6f78568bbc21152adc954d5a0c2f58bdbc9920"
 dependencies = [
  "serde",
+]
+
+[[package]]
+name = "zenos"
+version = "0.1.0"
+dependencies = [
+ "cpal",
+ "keyring",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-autostart",
+ "tauri-plugin-global-shortcut",
+ "tauri-plugin-single-instance",
+ "windows 0.62.2",
 ]
 
 [[package]]

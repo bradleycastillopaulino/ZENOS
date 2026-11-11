@@ -31,6 +31,12 @@ pub struct AppConfig {
     pub voice_volume: f64,
     /// Mantener la esfera visible también en reposo.
     pub orb_always_visible: bool,
+    /// Micrófono elegido (nombre exacto). Vacío = predeterminado del sistema.
+    pub input_device: String,
+    /// Altavoz elegido. Vacío = predeterminado del sistema.
+    pub output_device: String,
+    /// El asistente de configuración inicial ya se completó.
+    pub setup_done: bool,
     // Detección de voz
     pub silence_ms: u32,
     pub max_record_ms: u32,
@@ -45,7 +51,7 @@ impl Default for AppConfig {
             stt_provider: "groq".into(),
             stt_model: String::new(),
             language: "es".into(),
-            system_prompt: "Eres AI Star, un asistente de voz. Responde siempre en español, de forma \
+            system_prompt: "Eres ZENOS, un asistente de voz. Responde siempre en español, de forma \
                 natural, clara y breve (normalmente una a tres frases). Tu respuesta se leerá en voz \
                 alta: no uses markdown, listas, emojis, tablas ni código."
                 .into(),
@@ -56,6 +62,9 @@ impl Default for AppConfig {
             voice_rate: 1.0,
             voice_volume: 1.0,
             orb_always_visible: false,
+            input_device: String::new(),
+            output_device: String::new(),
+            setup_done: false,
             silence_ms: 1200,
             max_record_ms: 30_000,
             start_timeout_ms: 7_000,
@@ -155,7 +164,7 @@ mod tests {
 
     #[test]
     fn roundtrip_file() {
-        let dir = std::env::temp_dir().join(format!("aistar-test-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("zenos-test-{}", std::process::id()));
         let mut c = AppConfig::default();
         c.provider = "groq".into();
         save(&dir, &c).unwrap();

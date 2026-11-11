@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { api, errorText, type AppConfig } from "../api";
-import { Player } from "../player";
 import { Orb, type Phase } from "./Orb";
 
 const HIDE_DELAY_MS = 700;
@@ -14,7 +13,6 @@ export function OrbApp() {
   const [phase, setPhase] = useState<Phase>("hidden");
   const phaseRef = useRef<Phase>("hidden");
   const stageRef = useRef<HTMLDivElement>(null);
-  const player = useRef(new Player());
   const generation = useRef(0);
   const config = useRef<AppConfig | null>(null);
   const micLevel = useRef(0);
@@ -31,7 +29,7 @@ export function OrbApp() {
     let current = 0;
     const tick = () => {
       const p = phaseRef.current;
-      const target = p === "listening" ? micLevel.current : p === "speaking" ? player.current.level() : 0;
+      const target = p === "listening" || p === "speaking" ? micLevel.current : 0;
       current += (target - current) * (target > current ? 0.45 : 0.12);
       stageRef.current?.style.setProperty("--level", current.toFixed(3));
       raf = p === "hidden" && current < 0.001 ? 0 : requestAnimationFrame(tick);
@@ -59,7 +57,7 @@ export function OrbApp() {
   );
 
   const say = useCallback(async (chunks: string[]) => {
-    await player.current.speak(chunks, config.current?.voiceVolume ?? 1);
+    await api.speak(chunks);
   }, []);
 
   const run = useCallback(async () => {
@@ -78,6 +76,7 @@ export function OrbApp() {
       if (gen !== generation.current) return;
 
       go("speaking");
+      micLevel.current = 0;
       await say(reply.chunks);
     } catch (e) {
       if (gen !== generation.current) return;
@@ -95,7 +94,7 @@ export function OrbApp() {
   const cancel = useCallback(() => {
     const gen = ++generation.current;
     void api.cancelListen();
-    player.current.stop();
+    void api.stopSpeaking();
     rest(gen);
   }, [rest]);
 
@@ -106,19 +105,19 @@ export function OrbApp() {
       if (c.orbAlwaysVisible) go("idle");
     });
     const unlisten = [
-      listen("aistar://hotkey", () => {
+      listen("zenos://hotkey", () => {
         const p = phaseRef.current;
         if (p === "hidden" || p === "idle") void run();
         else cancel();
       }),
-      listen("aistar://cancel", () => cancel()),
-      listen<number>("aistar://level", (e) => {
+      listen("zenos://cancel", () => cancel()),
+      listen<number>("zenos://level", (e) => {
         micLevel.current = e.payload;
       }),
-      listen("aistar://recorded", () => {
+      listen("zenos://recorded", () => {
         if (phaseRef.current === "listening") go("thinking");
       }),
-      listen<AppConfig>("aistar://config", (e) => {
+      listen<AppConfig>("zenos://config", (e) => {
         config.current = e.payload;
         const p = phaseRef.current;
         if (e.payload.orbAlwaysVisible && p === "hidden") go("idle");

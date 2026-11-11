@@ -1,4 +1,4 @@
-//! Registro mínimo en %APPDATA%\com.aistar.app\logs\ai-star.log
+//! Registro mínimo en %APPDATA%\com.zenos.app\logs\zenos.log
 
 use std::io::Write;
 use std::path::PathBuf;
@@ -9,10 +9,10 @@ static LOG_PATH: OnceLock<PathBuf> = OnceLock::new();
 
 pub fn init(dir: PathBuf) {
     let _ = std::fs::create_dir_all(&dir);
-    let path = dir.join("ai-star.log");
+    let path = dir.join("zenos.log");
     // Rotación simple: si supera 1 MB se renombra.
     if std::fs::metadata(&path).map(|m| m.len() > 1_000_000).unwrap_or(false) {
-        let _ = std::fs::rename(&path, dir.join("ai-star.old.log"));
+        let _ = std::fs::rename(&path, dir.join("zenos.old.log"));
     }
     let _ = LOG_PATH.set(path);
 }

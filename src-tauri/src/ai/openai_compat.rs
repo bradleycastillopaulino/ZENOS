@@ -49,7 +49,7 @@ pub async fn chat(
         let body = build_body(provider, req, with_reasoning);
         let mut rb = client.post(&url).bearer_auth(api_key).json(&body);
         if provider.id == "openrouter" {
-            rb = rb.header("X-Title", "AI Star");
+            rb = rb.header("X-Title", "ZENOS");
         }
         let resp = rb.send().await.map_err(|e| network_error(provider.name, e))?;
         let status = resp.status().as_u16();

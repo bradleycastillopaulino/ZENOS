@@ -1,6 +1,6 @@
-# AI Star
+# ZENOS
 
-Asistente de voz para Windows 11. Una esfera de energía esmeralda flota en la esquina inferior derecha: pulsas **Ctrl + Alt + Espacio**, hablas en español y te responde en voz alta con la IA que elijas.
+Asistente de voz para Windows 11. Una pequeña esfera oscura y abstracta flota en la esquina inferior derecha: pulsas **Ctrl + Alt + Espacio**, hablas en español y te responde en voz alta con la IA que elijas.
 
 - Sin ventanas ni paneles: solo la esfera, transparente y sin bordes.
 - Proveedores: **OpenAI, Anthropic Claude, Google Gemini, Groq, DeepSeek y OpenRouter**.
@@ -9,15 +9,15 @@ Asistente de voz para Windows 11. Una esfera de energía esmeralda flota en la e
 
 ## Instalación (usuario final)
 
-1. Descarga `AI Star_x.y.z_x64-setup.exe` desde la sección **Releases** del repositorio.
+1. Descarga `ZENOS_x.y.z_x64-setup.exe` desde la sección **Releases** del repositorio.
 2. Ejecútalo. No requiere permisos de administrador, ni Python, Node.js o Rust.
    - Windows SmartScreen puede avisar porque el instalador no está firmado: pulsa **Más información → Ejecutar de todas formas**.
-3. Al abrirse por primera vez aparece la **Configuración**. Elige tu proveedor y pega tus claves (ver abajo).
+3. Al abrirse por primera vez aparece un **asistente de configuración**: eliges micrófono y altavoz (con prueba), tu IA y pegas la clave API. ZENOS verifica la clave y elige el modelo automáticamente.
 4. Pulsa **Ctrl + Alt + Espacio** y habla.
 
 ## Claves necesarias
 
-AI Star necesita dos servicios: uno para **entender tu voz** y otro para **responder**.
+ZENOS necesita dos servicios: uno para **entender tu voz** y otro para **responder**.
 
 | Para qué | Opciones | Dónde conseguir la clave |
 |---|---|---|
@@ -32,17 +32,17 @@ Si usas Groq para ambas cosas, con **una sola clave** es suficiente.
 |---|---|
 | Hablar | `Ctrl + Alt + Espacio` (configurable) |
 | Cancelar la grabación o interrumpir la respuesta | Pulsa el atajo otra vez, o `Esc` |
-| Configuración | Clic en el icono de AI Star en la bandeja del sistema |
+| Configuración | Clic en el icono de ZENOS en la bandeja del sistema |
 | Mostrar u ocultar la esfera en reposo | Menú del icono → *Mostrar / ocultar esfera* |
-| Salir | Menú del icono → *Salir de AI Star* |
+| Salir | Menú del icono → *Salir de ZENOS* |
 
-La esfera cambia según lo que hace:
+La esfera cambia de color y movimiento según lo que hace:
 
 - **En espera**: brillo tenue y movimiento lento.
-- **Escuchando**: se expande y contrae con el volumen de tu voz.
-- **Procesando**: remolino de partículas y deformación.
-- **Hablando**: late y emite ondas sincronizadas con la voz.
-- **Error**: se vuelve ámbar y te dice qué falta, por ejemplo una clave.
+- **Escuchando** (cian): reacciona al volumen de tu voz.
+- **Procesando** (violeta): anillos girando más rápido.
+- **Hablando** (magenta): late con la voz.
+- **Error** (rojo/naranja): te dice qué falta, por ejemplo una clave.
 
 La conversación recuerda los últimos turnos durante 5 minutos, así que puedes hacer preguntas de seguimiento.
 
@@ -50,28 +50,29 @@ La conversación recuerda los últimos turnos durante 5 minutos, así que puedes
 
 Todo se cambia desde la ventana de **Configuración**:
 
-- **Proveedor y modelo**: el campo *Modelo* sugiere modelos; si lo dejas vacío se usa el recomendado. Usa **Probar conexión** para comprobar la clave.
+- **Proveedor y modelo**: el campo *Modelo* sugiere modelos; si lo dejas vacío se usa el recomendado. Usa **Probar IA** para comprobar la clave.
+- **Micrófono y altavoz**: elige el dispositivo y pulsa **Probar** (barra de nivel en vivo).
 - **Voz**: usa las voces instaladas en Windows. Para tener voces en español: *Configuración de Windows → Hora e idioma → Voz → Agregar voces → Español*.
-- **Velocidad y volumen** de la voz, con el botón **Probar voz**.
+- **Velocidad y volumen** de la voz.
 - **Atajo de teclado**, **inicio con Windows** y **esfera siempre visible**.
-- **Avanzado**: silencio para terminar de escuchar, duración máxima e instrucciones del asistente.
+- **Repetir asistente de configuración** desde *Ayuda*.
 
-La configuración se guarda en `%APPDATA%\com.aistar.app\config.json` y no contiene claves.
+La configuración se guarda en `%APPDATA%\com.zenos.app\config.json` y no contiene claves.
 
 ## Solución de problemas
 
 | Problema | Solución |
 |---|---|
-| No pasa nada al pulsar el atajo | Comprueba que AI Star esté en la bandeja del sistema. Si otra aplicación usa el mismo atajo, cámbialo en Configuración. |
+| No pasa nada al pulsar el atajo | Comprueba que ZENOS esté en la bandeja del sistema. Si otra aplicación usa el mismo atajo, cámbialo en Configuración. |
 | «Falta la clave de…» | Abre la Configuración desde la bandeja y guarda la clave indicada. |
 | «La clave de … no es válida» | Copia la clave de nuevo desde la web del proveedor y comprueba que tenga saldo. |
 | «El modelo configurado no existe» | Deja el campo *Modelo* vacío para usar el recomendado. |
 | No me escucha | Revisa el micrófono predeterminado en *Configuración de Windows → Sistema → Sonido → Entrada* y que las apps de escritorio tengan permiso para usarlo (*Privacidad y seguridad → Micrófono*). |
-| Corta antes de que termine de hablar | Aumenta *Silencio para terminar* en Avanzado. |
+| Corta antes de que termine de hablar | Edita `silenceMs` en `config.json` (por defecto 1200). |
 | La voz no habla en español | Instala una voz española de Windows y selecciónala en Configuración. |
-| Otros errores | Revisa el registro en `%APPDATA%\com.aistar.app\logs\ai-star.log`. |
+| Otros errores | Revisa el registro en `%APPDATA%\com.zenos.app\logs\zenos.log`. |
 
-Para desinstalar: *Configuración de Windows → Aplicaciones → AI Star → Desinstalar*. Las claves se borran desde la Configuración de AI Star (botón ✕) o desde el *Administrador de credenciales* (entradas «AI Star»).
+Para desinstalar: *Configuración de Windows → Aplicaciones → ZENOS → Desinstalar*. Las claves se borran desde la Configuración de ZENOS (*Cambiar clave*) o desde el *Administrador de credenciales* (entradas «ZENOS»).
 
 ---
 
@@ -92,7 +93,7 @@ cargo test --manifest-path src-tauri/Cargo.toml
 src/                     Interfaz (React + TypeScript + Vite)
   orb/                   Esfera: Orb.tsx (estructura), orb.css (animaciones), OrbApp.tsx (ciclo)
   settings/              Ventana de configuración
-  player.ts              Reproducción de la voz y nivel de audio para la animación
+  (la voz se reproduce en Rust con cpal: src-tauri/src/audio/playback.rs)
 src-tauri/src/           Núcleo nativo (Rust)
   lib.rs                 Ventanas, bandeja, atajo global y comandos
   audio/                 Micrófono (cpal), detección de voz y WAV

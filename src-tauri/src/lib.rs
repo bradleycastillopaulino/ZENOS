@@ -25,10 +25,6 @@ use config::AppConfig;
 
 const ORB: &str = "orb";
 const SETTINGS: &str = "settings";
-/// Mismos argumentos para todas las ventanas (WebView2 exige que coincidan).
-/// Se permite reproducir audio sin interacción previa del usuario.
-pub const BROWSER_ARGS: &str =
-    "--autoplay-policy=no-user-gesture-required --disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection";
 const HISTORY_TTL: Duration = Duration::from_secs(300);
 
 pub struct AppState {
@@ -39,6 +35,7 @@ pub struct AppState {
     record: Mutex<Option<Arc<RecordControl>>>,
     hotkey: Mutex<Option<Shortcut>>,
     listening: AtomicBool,
+    speak_stop: Mutex<Arc<AtomicBool>>,
 }
 
 fn escape_shortcut() -> Shortcut {
@@ -69,7 +66,7 @@ fn show_orb(app: &AppHandle) {
 fn trigger_assistant(app: &AppHandle) {
     log::write("atajo: activar asistente");
     show_orb(app);
-    let _ = app.emit_to(ORB, "aistar://hotkey", ());
+    let _ = app.emit_to(ORB, "zenos://hotkey", ());
 }
 
 fn open_settings(app: &AppHandle) {
@@ -80,11 +77,10 @@ fn open_settings(app: &AppHandle) {
         return;
     }
     let result = WebviewWindowBuilder::new(app, SETTINGS, WebviewUrl::App("index.html".into()))
-        .title("AI Star · Configuración")
-        .inner_size(460.0, 700.0)
-        .min_inner_size(420.0, 560.0)
+        .title("ZENOS")
+        .inner_size(520.0, 680.0)
+        .min_inner_size(460.0, 560.0)
         .center()
-        .additional_browser_args(BROWSER_ARGS)
         .build();
     if let Err(e) = result {
         log::write(&format!("no se pudo abrir configuración: {e}"));
@@ -118,7 +114,7 @@ fn on_shortcut(app: &AppHandle, shortcut: &Shortcut, event_state: ShortcutState)
         return;
     }
     if *shortcut == escape_shortcut() {
-        let _ = app.emit_to(ORB, "aistar://cancel", ());
+        let _ = app.emit_to(ORB, "zenos://cancel", ());
         return;
     }
     let is_main = app.state::<AppState>().hotkey.lock().unwrap().as_ref() == Some(shortcut);
@@ -171,7 +167,7 @@ fn save_config(app: AppHandle, state: State<'_, AppState>, config: AppConfig) ->
     register_hotkey(&app, &config.hotkey)?;
     config::save(&state.config_dir, &config)?;
     *state.config.lock().unwrap() = config.clone();
-    let _ = app.emit_to(ORB, "aistar://config", &config);
+    let _ = app.emit_to(ORB, "zenos://config", &config);
     Ok(config)
 }
 
@@ -201,7 +197,7 @@ async fn listen(app: AppHandle, state: State<'_, AppState>) -> Result<ListenResu
     let c = cfg(&state);
     let key = secrets::get(&c.stt_provider).ok_or_else(|| {
         format!(
-            "Falta la clave de {} para reconocer tu voz. Configúrala desde el icono de AI Star.",
+            "Falta la clave de {} para reconocer tu voz. Configúrala desde el icono de ZENOS.",
             stt::display_name(&c.stt_provider)
         )
     })?;
@@ -217,9 +213,10 @@ async fn listen(app: AppHandle, state: State<'_, AppState>) -> Result<ListenResu
         ..VadConfig::default()
     };
     let app2 = app.clone();
+    let input_device = c.input_device.clone();
     let outcome = tauri::async_runtime::spawn_blocking(move || {
-        audio::record(vad_cfg, control, |level| {
-            let _ = app2.emit_to(ORB, "aistar://level", level);
+        audio::record(vad_cfg, &input_device, control, |level| {
+            let _ = app2.emit_to(ORB, "zenos://level", level);
         })
     })
     .await;
@@ -234,7 +231,7 @@ async fn listen(app: AppHandle, state: State<'_, AppState>) -> Result<ListenResu
         RecordOutcome::Cancelled => Ok(ListenResult { kind: "cancelled", text: String::new() }),
         RecordOutcome::NoSpeech => Ok(ListenResult { kind: "nospeech", text: String::new() }),
         RecordOutcome::Audio(wav) => {
-            let _ = app.emit_to(ORB, "aistar://recorded", ());
+            let _ = app.emit_to(ORB, "zenos://recorded", ());
             let text = stt::transcribe(&state.http, &c.stt_provider, &key, &c.effective_stt_model(), &c.language, wav).await?;
             log::write(&format!("transcripción: {text}"));
             if text.is_empty() {
@@ -258,7 +255,7 @@ async fn ask(state: State<'_, AppState>, text: String) -> Result<AskResult, Stri
     let c = cfg(&state);
     let provider = ai::provider_info(&c.provider).ok_or("Proveedor no válido.")?;
     let key = secrets::get(provider.id)
-        .ok_or_else(|| format!("Falta la clave de {}. Configúrala desde el icono de AI Star.", provider.name))?;
+        .ok_or_else(|| format!("Falta la clave de {}. Configúrala desde el icono de ZENOS.", provider.name))?;
 
     let mut messages = {
         let mut h = state.history.lock().unwrap();
@@ -308,13 +305,178 @@ fn reset_conversation(state: State<'_, AppState>) {
     state.history.lock().unwrap().0.clear();
 }
 
+/// Sintetiza y reproduce por el altavoz elegido. Bloquea hasta terminar o hasta `stop_speaking`.
+/// `level_to` = (ventana, evento) que recibe el nivel de la voz para animar.
+async fn speak_inner(
+    app: &AppHandle,
+    state: &State<'_, AppState>,
+    chunks: Vec<String>,
+    device: Option<String>,
+    level_to: (&'static str, &'static str),
+) -> Result<(), String> {
+    let c = cfg(state);
+    let stop = Arc::new(AtomicBool::new(false));
+    {
+        let mut cur = state.speak_stop.lock().unwrap();
+        cur.store(true, Ordering::SeqCst); // corta lo anterior
+        *cur = stop.clone();
+    }
+    let device = device.unwrap_or_else(|| c.output_device.clone());
+    let app2 = app.clone();
+    tauri::async_runtime::spawn_blocking(move || -> Result<(), String> {
+        let (tx, rx) = std::sync::mpsc::sync_channel::<Result<Vec<u8>, String>>(1);
+        let stop_p = stop.clone();
+        let (voice, language, rate) = (c.voice.clone(), c.language.clone(), c.voice_rate);
+        std::thread::spawn(move || {
+            for chunk in chunks {
+                if stop_p.load(Ordering::SeqCst) {
+                    break;
+                }
+                let r = tts::synthesize(&chunk, &voice, &language, rate);
+                let failed = r.is_err();
+                if tx.send(r).is_err() || failed {
+                    break;
+                }
+            }
+        });
+        for item in rx {
+            if stop.load(Ordering::SeqCst) {
+                break;
+            }
+            let wav = item?;
+            let (samples, hz) = audio::playback::parse_wav(&wav)?;
+            audio::playback::play(&samples, hz, &device, c.voice_volume as f32, &stop, |level| {
+                let _ = app2.emit_to(level_to.0, level_to.1, level);
+            })
+            .map_err(|e| {
+                log::write(&e);
+                e
+            })?;
+        }
+        Ok(())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 #[tauri::command]
-async fn synthesize(state: State<'_, AppState>, text: String) -> Result<tauri::ipc::Response, String> {
-    let c = cfg(&state);
-    let bytes = tauri::async_runtime::spawn_blocking(move || tts::synthesize(&text, &c.voice, &c.language, c.voice_rate))
+async fn speak(app: AppHandle, state: State<'_, AppState>, chunks: Vec<String>) -> Result<(), String> {
+    speak_inner(&app, &state, chunks, None, (ORB, "zenos://level")).await
+}
+
+#[tauri::command]
+fn stop_speaking(state: State<'_, AppState>) {
+    state.speak_stop.lock().unwrap().store(true, Ordering::SeqCst);
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Devices {
+    inputs: Vec<String>,
+    outputs: Vec<String>,
+}
+
+#[tauri::command]
+async fn list_devices() -> Result<Devices, String> {
+    tauri::async_runtime::spawn_blocking(|| Devices { inputs: audio::input_names(), outputs: audio::playback::output_names() })
         .await
-        .map_err(|e| e.to_string())??;
-    Ok(tauri::ipc::Response::new(bytes))
+        .map_err(|e| e.to_string())
+}
+
+/// Escucha 3 s y devuelve el nivel máximo (0..1). El nivel en vivo llega como `zenos://test-level`.
+#[tauri::command]
+async fn test_mic(app: AppHandle, device: String) -> Result<f32, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        audio::monitor(&device, 3000, |l| {
+            let _ = app.emit_to(SETTINGS, "zenos://test-level", l);
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn test_speaker(app: AppHandle, state: State<'_, AppState>, device: String, voice: String) -> Result<(), String> {
+    // Se prueba con la voz y el altavoz elegidos en pantalla, aunque aún no estén guardados.
+    let saved = cfg(&state);
+    if voice != saved.voice {
+        state.config.lock().unwrap().voice = voice;
+    }
+    let r = speak_inner(&app, &state, vec!["Hola, soy Zenos. Si me escuchas, el altavoz funciona.".into()], Some(device), (SETTINGS, "zenos://test-level")).await;
+    state.config.lock().unwrap().voice = saved.voice;
+    r
+}
+
+/// Verifica la clave probando modelos conocidos hasta que uno responda; guarda clave y modelo.
+#[tauri::command]
+async fn setup_provider(state: State<'_, AppState>, provider: String, key: String) -> Result<String, String> {
+    let info = ai::provider_info(&provider).ok_or("Proveedor no válido.")?;
+    let key = key.trim().to_string();
+    if key.is_empty() {
+        return Err("Pega tu clave API.".into());
+    }
+    let mut candidates: Vec<&str> = vec![info.default_model];
+    for m in info.suggested_models {
+        if !candidates.contains(m) {
+            candidates.push(m);
+        }
+    }
+    let msgs = [ChatMessage { role: "user".into(), content: "Responde solo: hola".into() }];
+    let mut chosen: Option<String> = None;
+    let mut last_err = String::new();
+    for m in candidates {
+        match ai::chat(
+            &state.http,
+            info,
+            &key,
+            ai::ChatRequest { model: m, system: "Responde en español, muy breve.", messages: &msgs, max_tokens: 256 },
+        )
+        .await
+        {
+            Ok(_) => {
+                chosen = Some(m.to_string());
+                break;
+            }
+            Err(e) if e.contains("no existe") => last_err = e, // probar el siguiente modelo
+            Err(e) => return Err(e),
+        }
+    }
+    let model = chosen.ok_or(if last_err.is_empty() { "No se encontró un modelo disponible.".to_string() } else { last_err })?;
+    secrets::set(info.id, &key)?;
+    let mut c = state.config.lock().unwrap();
+    c.provider = info.id.to_string();
+    c.model = model.clone();
+    if matches!(info.id, "groq" | "openai") {
+        c.stt_provider = info.id.to_string();
+    }
+    config::save(&state.config_dir, &c)?;
+    log::write(&format!("proveedor configurado: {} / {model}", info.id));
+    Ok(model)
+}
+
+/// Verifica y guarda la clave del servicio de transcripción (Groq u OpenAI).
+#[tauri::command]
+async fn setup_stt(state: State<'_, AppState>, provider: String, key: String) -> Result<(), String> {
+    if !matches!(provider.as_str(), "groq" | "openai") {
+        return Err("Servicio de voz no válido.".into());
+    }
+    let key = key.trim().to_string();
+    if key.is_empty() {
+        return Err("Pega tu clave API.".into());
+    }
+    let name = stt::display_name(&provider);
+    let url = if provider == "openai" { "https://api.openai.com/v1/models" } else { "https://api.groq.com/openai/v1/models" };
+    let resp = state.http.get(url).bearer_auth(&key).send().await.map_err(|e| ai::network_error(name, e))?;
+    if !resp.status().is_success() {
+        let status = resp.status().as_u16();
+        let body = resp.text().await.unwrap_or_default();
+        return Err(ai::friendly_http_error(name, status, &body));
+    }
+    secrets::set(&provider, &key)?;
+    let mut c = state.config.lock().unwrap();
+    c.stt_provider = provider;
+    config::save(&state.config_dir, &c)?;
+    Ok(())
 }
 
 #[tauri::command]
@@ -353,6 +515,19 @@ fn open_settings_cmd(app: AppHandle) {
     open_settings(&app);
 }
 
+/// Abre una página web (solo https) en el navegador predeterminado.
+#[tauri::command]
+fn open_url(url: String) -> Result<(), String> {
+    if !url.starts_with("https://") || url.contains(char::is_whitespace) || url.contains('"') {
+        return Err("Enlace no válido.".into());
+    }
+    #[cfg(windows)]
+    let r = std::process::Command::new("rundll32").args(["url.dll,FileProtocolHandler", &url]).spawn();
+    #[cfg(not(windows))]
+    let r = std::process::Command::new("xdg-open").arg(&url).spawn();
+    r.map(|_| ()).map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 fn get_autostart(app: AppHandle) -> bool {
     app.autolaunch().is_enabled().unwrap_or(false)
@@ -366,7 +541,7 @@ fn set_autostart(app: AppHandle, enabled: bool) -> Result<(), String> {
 
 #[tauri::command]
 fn log_path(state: State<'_, AppState>) -> String {
-    state.config_dir.join("logs").join("ai-star.log").display().to_string()
+    state.config_dir.join("logs").join("zenos.log").display().to_string()
 }
 
 // ------------------------------------------------------------------ bandeja
@@ -382,7 +557,7 @@ fn toggle_orb_pinned(app: &AppHandle) {
     if config.orb_always_visible {
         show_orb(app);
     }
-    let _ = app.emit_to(ORB, "aistar://config", &config);
+    let _ = app.emit_to(ORB, "zenos://config", &config);
 }
 
 fn build_tray(app: &AppHandle) -> tauri::Result<()> {
@@ -390,11 +565,11 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     let talk = MenuItem::with_id(app, "talk", format!("Hablar ({hotkey})"), true, None::<&str>)?;
     let toggle = MenuItem::with_id(app, "toggle", "Mostrar / ocultar esfera", true, None::<&str>)?;
     let settings = MenuItem::with_id(app, "settings", "Configuración…", true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, "quit", "Salir de AI Star", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", "Salir de ZENOS", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&talk, &toggle, &settings, &PredefinedMenuItem::separator(app)?, &quit])?;
 
     let mut tray = TrayIconBuilder::with_id("main")
-        .tooltip("AI Star")
+        .tooltip("ZENOS")
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id.as_ref() {
@@ -438,7 +613,7 @@ pub fn run() {
             let handle = app.handle().clone();
             let config_dir = app.path().app_config_dir()?;
             log::init(config_dir.join("logs"));
-            log::write(&format!("AI Star {} iniciando", app.package_info().version));
+            log::write(&format!("ZENOS {} iniciando", app.package_info().version));
 
             let first_run = !config::config_path(&config_dir).exists();
             let config = config::load(&config_dir);
@@ -450,7 +625,7 @@ pub fn run() {
             let http = reqwest::Client::builder()
                 .timeout(Duration::from_secs(60))
                 .connect_timeout(Duration::from_secs(10))
-                .user_agent(concat!("AI-Star/", env!("CARGO_PKG_VERSION")))
+                .user_agent(concat!("ZENOS/", env!("CARGO_PKG_VERSION")))
                 .build()?;
 
             app.manage(AppState {
@@ -461,6 +636,7 @@ pub fn run() {
                 record: Mutex::new(None),
                 hotkey: Mutex::new(None),
                 listening: AtomicBool::new(false),
+                speak_stop: Mutex::new(Arc::new(AtomicBool::new(false))),
             });
 
             if let Err(e) = register_hotkey(&handle, &config.hotkey) {
@@ -479,7 +655,7 @@ pub fn run() {
 
             let autostarted = std::env::args().any(|a| a == "--autostart");
             let missing_keys = !secrets::has(&config.provider) || !secrets::has(&config.stt_provider);
-            if first_run || (missing_keys && !autostarted) {
+            if first_run || !config.setup_done || (missing_keys && !autostarted) {
                 open_settings(&handle);
             }
             Ok(())
@@ -505,16 +681,23 @@ pub fn run() {
             ask,
             test_provider,
             reset_conversation,
-            synthesize,
+            speak,
+            stop_speaking,
+            list_devices,
+            test_mic,
+            test_speaker,
+            setup_provider,
+            setup_stt,
             list_voices,
             set_active,
             hide_orb,
             show_orb_cmd,
             open_settings_cmd,
             get_autostart,
+            open_url,
             set_autostart,
             log_path,
         ])
         .run(tauri::generate_context!())
-        .expect("error al iniciar AI Star");
+        .expect("error al iniciar ZENOS");
 }

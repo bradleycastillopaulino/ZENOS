@@ -14,6 +14,9 @@ export interface AppConfig {
   voiceRate: number;
   voiceVolume: number;
   orbAlwaysVisible: boolean;
+  inputDevice: string;
+  outputDevice: string;
+  setupDone: boolean;
   silenceMs: number;
   maxRecordMs: number;
   startTimeoutMs: number;
@@ -54,12 +57,20 @@ export const api = {
   ask: (text: string) => invoke<AskResult>("ask", { text }),
   testProvider: () => invoke<string>("test_provider"),
   resetConversation: () => invoke<void>("reset_conversation"),
-  synthesize: (text: string) => invoke<ArrayBuffer>("synthesize", { text }),
+  speak: (chunks: string[]) => invoke<void>("speak", { chunks }),
+  stopSpeaking: () => invoke<void>("stop_speaking"),
+  listDevices: () => invoke<{ inputs: string[]; outputs: string[] }>("list_devices"),
+  testMic: (device: string) => invoke<number>("test_mic", { device }),
+  testSpeaker: (device: string, voice: string) => invoke<void>("test_speaker", { device, voice }),
+  setupProvider: (provider: string, key: string) => invoke<string>("setup_provider", { provider, key }),
+  setupStt: (provider: string, key: string) => invoke<void>("setup_stt", { provider, key }),
   listVoices: () => invoke<Voice[]>("list_voices"),
   setActive: (active: boolean) => invoke<void>("set_active", { active }),
   hideOrb: () => invoke<void>("hide_orb"),
   getAutostart: () => invoke<boolean>("get_autostart"),
   setAutostart: (enabled: boolean) => invoke<void>("set_autostart", { enabled }),
+  openUrl: (url: string) => invoke<void>("open_url", { url }),
+  showOrb: () => invoke<void>("show_orb_cmd"),
   logPath: () => invoke<string>("log_path"),
 };
 

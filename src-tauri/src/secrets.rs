@@ -1,7 +1,7 @@
 //! Claves API en el Administrador de credenciales de Windows (vía `keyring`).
 //! Las claves nunca se devuelven al frontend; solo se informa si existen.
 
-const SERVICE: &str = "AI Star";
+const SERVICE: &str = "ZENOS";
 
 fn entry(provider: &str) -> Result<keyring::Entry, String> {
     keyring::Entry::new(SERVICE, provider).map_err(|e| e.to_string())
@@ -34,7 +34,7 @@ pub fn has(provider: &str) -> bool {
 mod tests {
     #[test]
     fn windows_credential_manager_roundtrip() {
-        let id = "aistar-ci-test";
+        let id = "zenos-ci-test";
         super::set(id, "  clave-de-prueba  ").unwrap();
         assert_eq!(super::get(id).as_deref(), Some("clave-de-prueba"));
         super::delete(id).unwrap();

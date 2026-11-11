@@ -1,13 +1,13 @@
 [package]
-name = "ai-star"
+name = "zenos"
 version = "0.1.0"
-description = "AI Star - asistente de voz para Windows"
-authors = ["AI Star"]
+description = "ZENOS - asistente de voz para Windows"
+authors = ["ZENOS"]
 edition = "2021"
 license = "MIT"
 
 [lib]
-name = "ai_star_lib"
+name = "zenos_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
