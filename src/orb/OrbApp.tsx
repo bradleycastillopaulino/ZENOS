@@ -13,6 +13,7 @@ export function OrbApp() {
   const [phase, setPhase] = useState<Phase>("hidden");
   const phaseRef = useRef<Phase>("hidden");
   const [theme, setTheme] = useState("menta");
+  const [avatar, setAvatar] = useState("formas");
   const generation = useRef(0);
   const config = useRef<AppConfig | null>(null);
   const micLevel = useRef(0);
@@ -88,6 +89,7 @@ export function OrbApp() {
     void api.getConfig().then((c) => {
       config.current = c;
       setTheme(c.theme);
+      setAvatar(c.avatar);
       if (c.orbAlwaysVisible) go("idle");
     });
     const unlisten = [
@@ -121,6 +123,7 @@ export function OrbApp() {
       listen<AppConfig>("zenos://config", (e) => {
         config.current = e.payload;
         setTheme(e.payload.theme);
+        setAvatar(e.payload.avatar);
         const p = phaseRef.current;
         if (e.payload.orbAlwaysVisible && p === "hidden") go("idle");
         if (!e.payload.orbAlwaysVisible && p === "idle") rest(generation.current);
@@ -129,5 +132,5 @@ export function OrbApp() {
     return () => unlisten.forEach((u) => void u.then((f) => f()));
   }, [run, cancel, go, rest]);
 
-  return <Orb phase={phase} theme={theme} level={micLevel} />;
+  return <Orb phase={phase} theme={theme} level={micLevel} avatar={avatar} />;
 }

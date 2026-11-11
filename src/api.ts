@@ -21,6 +21,7 @@ export interface AppConfig {
   wakeWord: boolean;
   theme: string;
   uiTheme: string;
+  avatar: string;
   readSize: number;
   orbScale: number;
   orbCorner: string;

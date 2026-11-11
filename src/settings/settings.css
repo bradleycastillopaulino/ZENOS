@@ -119,3 +119,12 @@ button.card.sel { background: var(--mint); color: var(--on-accent); }
 .read-sample { margin-top: 10px; padding: 10px 14px; background: var(--cream); border: 3px solid var(--ink); border-radius: 14px; box-shadow: 4px 5px 0 var(--ink); max-width: 100%; }
 .read-sample .you { font-size: calc(12.5px * var(--read, 1)); color: var(--muted); margin-bottom: 4px; }
 .read-sample .zenos { font-size: calc(15px * var(--read, 1)); font-weight: 600; }
+
+/* ---- avatares ---- */
+.avatars { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+.avatar-card { display: grid; grid-template-columns: 76px 1fr; grid-template-rows: auto 1fr; column-gap: 12px; align-items: center; text-align: left; background: var(--paper); color: var(--ink); box-shadow: none; padding: 8px 12px 8px 8px; font-weight: 500; }
+.avatar-card > div { grid-row: 1 / span 2; }
+.avatar-card b { align-self: end; font-size: 14px; }
+.avatar-card span { align-self: start; font-size: 12px; color: var(--muted); }
+.avatar-card.on { background: var(--mint); color: var(--on-accent); box-shadow: 3px 4px 0 var(--ink); }
+.avatar-card.on span { color: var(--on-accent); }

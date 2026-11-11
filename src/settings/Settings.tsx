@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { api, errorText, type AppConfig, type ProviderInfo, type Voice } from "../api";
-import { THEMES } from "../orb/Orb";
+import { AVATARS, AvatarIcon, THEMES } from "../orb/Orb";
 import { UI_THEMES, applyReadSize, applyUiTheme } from "../theme";
 import "./settings.css";
 
@@ -45,15 +45,9 @@ function LevelBar() {
 
 // ------------------------------------------------------------------ dispositivos y voz
 
-function Logo({ size = 64, theme = "menta" }: { size?: number; theme?: string }) {
-  const c = THEMES[theme]?.body ?? THEMES.menta.body;
-  return (
-    <svg width={size} height={size} viewBox="0 0 100 100" aria-hidden="true">
-      <polygon points="53,8 87,30 87,68 53,90 19,68 19,30" style={{ fill: "var(--ink)" }} transform="translate(4,5)" />
-      <polygon points="50,6 84,28 84,66 50,88 16,66 16,28" fill={c} style={{ stroke: "var(--ink)" }} strokeWidth="4.5" strokeLinejoin="round" />
-      <polygon points="50,26 68,37 68,57 50,68 32,57 32,37" fill="#FFF6D6" style={{ stroke: "var(--ink)" }} strokeWidth="3.5" strokeLinejoin="round" />
-    </svg>
-  );
+/** Icono animado: es el mismo avatar que elijas para la esfera. */
+function Logo({ size = 64, theme = "menta", avatar = "formas" }: { size?: number; theme?: string; avatar?: string }) {
+  return <AvatarIcon size={size} theme={theme} avatar={avatar} />;
 }
 
 function DevicePicker({ input, output, onChange }: { input: string; output: string; onChange: (input: string, output: string) => void }) {
@@ -202,6 +196,20 @@ function ThemePicker({ value, onChange }: { value: string; onChange: (t: string)
     <div className="swatches">
       {Object.entries(THEMES).map(([id, t]) => (
         <button key={id} className={id === value ? "swatch on" : "swatch"} style={{ background: t.body }} title={t.label} aria-label={t.label} onClick={() => onChange(id)} />
+      ))}
+    </div>
+  );
+}
+
+function AvatarPicker({ value, theme, onChange }: { value: string; theme: string; onChange: (a: string) => void }) {
+  return (
+    <div className="avatars">
+      {AVATARS.map((a) => (
+        <button key={a.id} className={a.id === value ? "avatar-card on" : "avatar-card"} aria-pressed={a.id === value} onClick={() => onChange(a.id)}>
+          <AvatarIcon size={76} theme={theme} avatar={a.id} />
+          <b>{a.name}</b>
+          <span>{a.text}</span>
+        </button>
       ))}
     </div>
   );
@@ -457,7 +465,7 @@ function Wizard({ initial, providers, onFinish }: { initial: AppConfig; provider
       <div className="page" key={name}>
         {name === "Bienvenida" && (
           <div className="center">
-            <Logo size={110} theme={cfg.theme} />
+            <Logo size={110} theme={cfg.theme} avatar={cfg.avatar} />
             <h1>ZENOS</h1>
             <p className="lead">
               Tu asistente de voz. Pulsa <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>Espacio</kbd>, habla y escucha la respuesta. También puede abrir programas y manejar tus archivos.
@@ -508,11 +516,9 @@ function Wizard({ initial, providers, onFinish }: { initial: AppConfig; provider
 
         {name === "Estilo" && (
           <>
-            <h2>Color de tu orbe</h2>
-            <p className="hint">Puedes cambiarlo cuando quieras en Apariencia.</p>
-            <div className="center">
-              <Logo size={96} theme={cfg.theme} />
-            </div>
+            <h2>Tu esfera</h2>
+            <p className="hint">Puedes cambiarla cuando quieras en Apariencia.</p>
+            <AvatarPicker value={cfg.avatar} theme={cfg.theme} onChange={(a) => set("avatar", a)} />
             <ThemePicker value={cfg.theme} onChange={(t) => set("theme", t)} />
             <h2 style={{ marginTop: 22 }}>Tema de la interfaz</h2>
             <UiThemePicker value={cfg.uiTheme} onChange={(t) => set("uiTheme", t)} />
@@ -529,7 +535,7 @@ function Wizard({ initial, providers, onFinish }: { initial: AppConfig; provider
 
         {name === "Listo" && (
           <div className="center">
-            <Logo size={96} theme={cfg.theme} />
+            <Logo size={96} theme={cfg.theme} avatar={cfg.avatar} />
             <h2>Todo listo</h2>
             <p className="lead">
               Pulsa <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>Espacio</kbd> cuando quieras. Para cancelar, pulsa <kbd>Esc</kbd>.
@@ -641,7 +647,7 @@ function Panel({ initial, providers, rerun }: { initial: AppConfig; providers: P
     <div className="shell">
       <nav>
         <div className="brand">
-          <Logo size={54} theme={cfg.theme} />
+          <Logo size={54} theme={cfg.theme} avatar={cfg.avatar} />
           <b>ZENOS</b>
         </div>
         {PAGES.map((p) => (
@@ -786,6 +792,10 @@ function Panel({ initial, providers, rerun }: { initial: AppConfig; providers: P
                 <UiThemePicker value={cfg.uiTheme} onChange={(t) => set("uiTheme", t)} />
               </div>
               <h3>Esfera</h3>
+              <div className="field">
+                <label>Avatar</label>
+                <AvatarPicker value={cfg.avatar} theme={cfg.theme} onChange={(a) => set("avatar", a)} />
+              </div>
               <div className="field">
                 <label>Color</label>
                 <ThemePicker value={cfg.theme} onChange={(t) => set("theme", t)} />

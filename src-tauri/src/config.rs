@@ -45,6 +45,8 @@ pub struct AppConfig {
     pub theme: String,
     /// Tema de la interfaz: crema | lavanda | durazno (claros) · medianoche | carbon | bosque (oscuros)
     pub ui_theme: String,
+    /// Avatar de la esfera: formas | gelatina | pulso | orbita
+    pub avatar: String,
     /// Tamaño del texto del recuadro de lectura (0.8 - 2.0).
     pub read_size: f64,
     /// Escala de la esfera (0.7 - 1.8).
@@ -91,6 +93,7 @@ impl Default for AppConfig {
             wake_word: false,
             theme: "menta".into(),
             ui_theme: "crema".into(),
+            avatar: "formas".into(),
             read_size: 1.0,
             orb_scale: 1.0,
             orb_corner: "br".into(),
@@ -147,6 +150,9 @@ impl AppConfig {
         if !matches!(self.ui_theme.as_str(), "crema" | "lavanda" | "durazno" | "medianoche" | "carbon" | "bosque") {
             self.ui_theme = d.ui_theme;
         }
+        if !matches!(self.avatar.as_str(), "formas" | "gelatina" | "pulso" | "orbita") {
+            self.avatar = d.avatar;
+        }
         if !matches!(self.orb_corner.as_str(), "br" | "bl" | "tr" | "tl") {
             self.orb_corner = d.orb_corner;
         }
@@ -202,10 +208,11 @@ mod tests {
         assert_eq!(c.provider, "anthropic");
         assert_eq!(c.voice_rate, 2.0);
         assert_eq!(c.hotkey, "Ctrl+Alt+Space");
-        let c: AppConfig = serde_json::from_str(r#"{"theme":"x","orbCorner":"zz","permissionLevel":"?","orbScale":9,"uiTheme":"neon","readSize":9}"#).unwrap();
+        let c: AppConfig = serde_json::from_str(r#"{"theme":"x","orbCorner":"zz","permissionLevel":"?","orbScale":9,"uiTheme":"neon","avatar":"robot","readSize":9}"#).unwrap();
         let c = c.sanitize();
         assert_eq!((c.theme.as_str(), c.orb_corner.as_str(), c.permission_level.as_str()), ("menta", "br", "normal"));
         assert_eq!((c.ui_theme.as_str(), c.read_size), ("crema", 2.0));
+        assert_eq!(c.avatar, "formas");
         assert_eq!(c.orb_scale, 1.8);
     }
 
