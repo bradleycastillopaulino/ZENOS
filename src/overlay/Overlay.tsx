@@ -1,17 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { api, type AppConfig } from "../api";
+import { api } from "../api";
+import { useAppConfig } from "../theme";
 import "./overlay.css";
 
 function useCorner(): string {
-  const [corner, setCorner] = useState("br");
+  const cfg = useAppConfig();
   useEffect(() => {
     document.documentElement.classList.add("overlay");
-    void api.getConfig().then((c) => setCorner(c.orbCorner));
-    const u = listen<AppConfig>("zenos://config", (e) => setCorner(e.payload.orbCorner));
-    return () => void u.then((f) => f());
   }, []);
-  return corner;
+  return cfg?.orbCorner ?? "br";
 }
 
 /** Recuadro de lectura: muestra lo que dice ZENOS. Transparente y sin interacción. */
@@ -87,7 +85,7 @@ export function TypeBox() {
         />
         {mic && (
           <button className="mic" title="Hablar en vez de escribir" aria-label="Hablar" onClick={() => void api.startVoice()}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1e1b2e" strokeWidth="2.6" strokeLinecap="round">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round">
               <rect x="9" y="3" width="6" height="11" rx="3" />
               <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
             </svg>

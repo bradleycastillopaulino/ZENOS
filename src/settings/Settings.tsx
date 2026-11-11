@@ -3,6 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { api, errorText, type AppConfig, type ProviderInfo, type Voice } from "../api";
 import { THEMES } from "../orb/Orb";
+import { UI_THEMES, applyReadSize, applyUiTheme } from "../theme";
 import "./settings.css";
 
 type Note = { kind: "ok" | "error" | "info"; text: string } | null;
@@ -48,9 +49,9 @@ function Logo({ size = 64, theme = "menta" }: { size?: number; theme?: string })
   const c = THEMES[theme]?.body ?? THEMES.menta.body;
   return (
     <svg width={size} height={size} viewBox="0 0 100 100" aria-hidden="true">
-      <polygon points="53,8 87,30 87,68 53,90 19,68 19,30" fill="#1E1B2E" transform="translate(4,5)" />
-      <polygon points="50,6 84,28 84,66 50,88 16,66 16,28" fill={c} stroke="#1E1B2E" strokeWidth="4.5" strokeLinejoin="round" />
-      <polygon points="50,26 68,37 68,57 50,68 32,57 32,37" fill="#FFF6D6" stroke="#1E1B2E" strokeWidth="3.5" strokeLinejoin="round" />
+      <polygon points="53,8 87,30 87,68 53,90 19,68 19,30" style={{ fill: "var(--ink)" }} transform="translate(4,5)" />
+      <polygon points="50,6 84,28 84,66 50,88 16,66 16,28" fill={c} style={{ stroke: "var(--ink)" }} strokeWidth="4.5" strokeLinejoin="round" />
+      <polygon points="50,26 68,37 68,57 50,68 32,57 32,37" fill="#FFF6D6" style={{ stroke: "var(--ink)" }} strokeWidth="3.5" strokeLinejoin="round" />
     </svg>
   );
 }
@@ -203,6 +204,32 @@ function ThemePicker({ value, onChange }: { value: string; onChange: (t: string)
         <button key={id} className={id === value ? "swatch on" : "swatch"} style={{ background: t.body }} title={t.label} aria-label={t.label} onClick={() => onChange(id)} />
       ))}
     </div>
+  );
+}
+
+function UiThemePicker({ value, onChange }: { value: string; onChange: (t: string) => void }) {
+  const group = (dark: boolean, title: string) => (
+    <>
+      <div className="ui-group">{title}</div>
+      <div className="ui-themes">
+        {UI_THEMES.filter((t) => t.dark === dark).map((t) => (
+          <button key={t.id} className={t.id === value ? "ui-theme on" : "ui-theme"} aria-pressed={t.id === value} onClick={() => onChange(t.id)}>
+            <span className="ui-prev" style={{ background: t.bg, borderColor: t.ink }}>
+              <i style={{ background: "#62d9b4", borderColor: t.ink }} />
+              <i style={{ background: t.paper, borderColor: t.ink }} />
+              <i style={{ background: "#ffd25e", borderColor: t.ink }} />
+            </span>
+            {t.name}
+          </button>
+        ))}
+      </div>
+    </>
+  );
+  return (
+    <>
+      {group(false, "Claros")}
+      {group(true, "Oscuros")}
+    </>
   );
 }
 
@@ -388,6 +415,9 @@ function Wizard({ initial, providers, onFinish }: { initial: AppConfig; provider
   const [sttDone, setSttDone] = useState(false);
   const [autostart, setAutostart] = useState(true);
   const [err, setErr] = useState("");
+  useEffect(() => {
+    applyUiTheme(cfg.uiTheme);
+  }, [cfg.uiTheme]);
   const set = <K extends keyof AppConfig>(k: K, v: AppConfig[K]) => setCfg((c) => ({ ...c, [k]: v }));
 
   const needsStt = provider !== "" && provider !== "groq" && provider !== "openai";
@@ -484,6 +514,8 @@ function Wizard({ initial, providers, onFinish }: { initial: AppConfig; provider
               <Logo size={96} theme={cfg.theme} />
             </div>
             <ThemePicker value={cfg.theme} onChange={(t) => set("theme", t)} />
+            <h2 style={{ marginTop: 22 }}>Tema de la interfaz</h2>
+            <UiThemePicker value={cfg.uiTheme} onChange={(t) => set("uiTheme", t)} />
           </>
         )}
 
@@ -569,6 +601,10 @@ function Panel({ initial, providers, rerun }: { initial: AppConfig; providers: P
     void api.hasMicrophone().then(setHasMic);
   }, [refreshKeys]);
 
+  useEffect(() => {
+    applyUiTheme(cfg.uiTheme);
+    applyReadSize(cfg.readSize);
+  }, [cfg.uiTheme, cfg.readSize]);
   const info = providers.find((p) => p.id === cfg.provider);
   const set = <K extends keyof AppConfig>(k: K, v: AppConfig[K]) => {
     setCfg((c) => ({ ...c, [k]: v }));
@@ -746,7 +782,12 @@ function Panel({ initial, providers, rerun }: { initial: AppConfig; providers: P
             <>
               <h2>Apariencia</h2>
               <div className="field">
-                <label>Color del orbe</label>
+                <label>Tema de la interfaz</label>
+                <UiThemePicker value={cfg.uiTheme} onChange={(t) => set("uiTheme", t)} />
+              </div>
+              <h3>Esfera</h3>
+              <div className="field">
+                <label>Color</label>
                 <ThemePicker value={cfg.theme} onChange={(t) => set("theme", t)} />
               </div>
               <div className="field">
@@ -767,6 +808,19 @@ function Panel({ initial, providers, rerun }: { initial: AppConfig; providers: P
                 <input type="checkbox" checked={cfg.orbAlwaysVisible} onChange={(e) => set("orbAlwaysVisible", e.target.checked)} />
                 Mantener el orbe visible siempre
               </label>
+              <h3>Modo lectura</h3>
+              <label className="check">
+                <input type="checkbox" checked={cfg.readAlong} onChange={(e) => set("readAlong", e.target.checked)} />
+                <span>Mostrar en un recuadro sobre la esfera lo que dice ZENOS</span>
+              </label>
+              <div className="field" style={{ opacity: cfg.readAlong ? 1 : 0.5 }}>
+                <label>Tamaño del texto: {Math.round(cfg.readSize * 100)}%</label>
+                <input type="range" min={0.8} max={2} step={0.1} disabled={!cfg.readAlong} value={cfg.readSize} onChange={(e) => set("readSize", Number(e.target.value))} />
+                <div className="read-sample">
+                  <div className="you">Tú: abre la calculadora</div>
+                  <div className="zenos">Listo, abrí la calculadora.</div>
+                </div>
+              </div>
             </>
           )}
 

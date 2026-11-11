@@ -20,6 +20,8 @@ export interface AppConfig {
   hotkeyMode: "toggle" | "hold";
   wakeWord: boolean;
   theme: string;
+  uiTheme: string;
+  readSize: number;
   orbScale: number;
   orbCorner: string;
   readAlong: boolean;

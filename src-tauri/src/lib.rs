@@ -161,7 +161,9 @@ fn typebox_visible(app: &AppHandle) -> bool {
 
 fn show_bubble(app: &AppHandle) {
     let extra = if typebox_visible(app) { TYPE_H + 6.0 } else { 0.0 };
-    place_near_orb(app, BUBBLE, BUBBLE_W, BUBBLE_H, extra);
+    // El recuadro crece con el tamaño del texto para que no se recorte.
+    let k = app.state::<AppState>().config.lock().unwrap().read_size.clamp(0.8, 2.0);
+    place_near_orb(app, BUBBLE, BUBBLE_W * k, BUBBLE_H * k, extra);
     if let Some(w) = app.get_webview_window(BUBBLE) {
         let _ = w.show();
         let _ = w.set_ignore_cursor_events(true);

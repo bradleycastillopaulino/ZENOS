@@ -1,0 +1,33 @@
+/* Temas de la interfaz. Mismos acentos (menta, sol, coral) y mismo estilo de bordes gruesos en todos. */
+:root {
+  --ink: #1e1b2e;       /* texto, bordes y sombras */
+  --cream: #f7f0e1;     /* fondo de la ventana */
+  --cream2: #efe5cf;    /* barra lateral, zonas secundarias */
+  --paper: #ffffff;     /* tarjetas y campos */
+  --muted: #5a5470;
+  --mint: #62d9b4;
+  --sun: #ffd25e;
+  --coral: #ff8a7a;
+  --on-accent: #1e1b2e; /* texto sobre botones de color */
+  --link: #2d5fc0;
+  --bad: #c0392b;
+  --note-ok: #c9f3e4;
+  --note-error: #ffd2cb;
+  --note-info: #fff1c2;
+  color-scheme: light;
+}
+:root[data-ui="lavanda"] { --cream: #ece6fb; --cream2: #ddd2f6; --muted: #5b5478; }
+:root[data-ui="durazno"] { --cream: #fdebdc; --cream2: #f8d6bd; --muted: #6a5450; }
+
+:root[data-ui="medianoche"], :root[data-ui="carbon"], :root[data-ui="bosque"] {
+  --on-accent: #1e1b2e;
+  --link: #8fb4ff;
+  --bad: #ff8a7a;
+  --note-ok: #1f4d3f;
+  --note-error: #5c2c2c;
+  --note-info: #51441f;
+  color-scheme: dark;
+}
+:root[data-ui="medianoche"] { --ink: #f4ecdc; --cream: #1b1830; --cream2: #25214a; --paper: #2d2955; --muted: #b9b2d4; }
+:root[data-ui="carbon"]     { --ink: #f1eee8; --cream: #1c1c1f; --cream2: #27272b; --paper: #313136; --muted: #b1ada5; }
+:root[data-ui="bosque"]     { --ink: #eef3e6; --cream: #13221e; --cream2: #1b3029; --paper: #234038; --muted: #aac1b4; }

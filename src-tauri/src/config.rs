@@ -43,6 +43,10 @@ pub struct AppConfig {
     pub wake_word: bool,
     /// Tema de color de la esfera: menta | uva | mandarina | chicle | cielo
     pub theme: String,
+    /// Tema de la interfaz: crema | lavanda | durazno (claros) · medianoche | carbon | bosque (oscuros)
+    pub ui_theme: String,
+    /// Tamaño del texto del recuadro de lectura (0.8 - 2.0).
+    pub read_size: f64,
     /// Escala de la esfera (0.7 - 1.8).
     pub orb_scale: f64,
     /// Esquina de la pantalla: br | bl | tr | tl
@@ -86,6 +90,8 @@ impl Default for AppConfig {
             hotkey_mode: "toggle".into(),
             wake_word: false,
             theme: "menta".into(),
+            ui_theme: "crema".into(),
+            read_size: 1.0,
             orb_scale: 1.0,
             orb_corner: "br".into(),
             read_along: false,
@@ -138,6 +144,9 @@ impl AppConfig {
         if !matches!(self.theme.as_str(), "menta" | "uva" | "mandarina" | "chicle" | "cielo") {
             self.theme = d.theme;
         }
+        if !matches!(self.ui_theme.as_str(), "crema" | "lavanda" | "durazno" | "medianoche" | "carbon" | "bosque") {
+            self.ui_theme = d.ui_theme;
+        }
         if !matches!(self.orb_corner.as_str(), "br" | "bl" | "tr" | "tl") {
             self.orb_corner = d.orb_corner;
         }
@@ -145,6 +154,7 @@ impl AppConfig {
             self.permission_level = d.permission_level;
         }
         self.orb_scale = self.orb_scale.clamp(0.7, 1.8);
+        self.read_size = if self.read_size.is_finite() { self.read_size.clamp(0.8, 2.0) } else { 1.0 };
         self.voice_rate = self.voice_rate.clamp(0.5, 2.0);
         self.voice_volume = self.voice_volume.clamp(0.0, 1.0);
         self.silence_ms = self.silence_ms.clamp(400, 5000);
@@ -192,9 +202,10 @@ mod tests {
         assert_eq!(c.provider, "anthropic");
         assert_eq!(c.voice_rate, 2.0);
         assert_eq!(c.hotkey, "Ctrl+Alt+Space");
-        let c: AppConfig = serde_json::from_str(r#"{"theme":"x","orbCorner":"zz","permissionLevel":"?","orbScale":9}"#).unwrap();
+        let c: AppConfig = serde_json::from_str(r#"{"theme":"x","orbCorner":"zz","permissionLevel":"?","orbScale":9,"uiTheme":"neon","readSize":9}"#).unwrap();
         let c = c.sanitize();
         assert_eq!((c.theme.as_str(), c.orb_corner.as_str(), c.permission_level.as_str()), ("menta", "br", "normal"));
+        assert_eq!((c.ui_theme.as_str(), c.read_size), ("crema", 2.0));
         assert_eq!(c.orb_scale, 1.8);
     }
 

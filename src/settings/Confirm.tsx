@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
 import { api, type ConfirmInfo } from "../api";
+import { useAppConfig } from "../theme";
 import "./settings.css";
 
 /** Ventana que pide permiso antes de una acción delicada. Cerrarla = no autorizar. */
 export function Confirm() {
   const [info, setInfo] = useState<ConfirmInfo | null>(null);
+  useAppConfig();
   useEffect(() => {
     document.documentElement.classList.add("settings");
     void api.getConfirm().then(setInfo);

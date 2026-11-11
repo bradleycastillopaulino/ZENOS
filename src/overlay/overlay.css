@@ -1,6 +1,6 @@
 html.overlay, html.overlay body, html.overlay #root { height: 100%; margin: 0; overflow: hidden; background: transparent; user-select: none; }
 html.overlay * { box-sizing: border-box; }
-html.overlay { font: 14px/1.45 "Segoe UI Variable", "Segoe UI", system-ui, sans-serif; color: #1e1b2e; }
+html.overlay { font: 14px/1.45 "Segoe UI Variable", "Segoe UI", system-ui, sans-serif; color: var(--ink); }
 
 .bubble-wrap, .typebox-wrap { height: 100%; display: flex; flex-direction: column; padding: 4px 8px 8px 4px; }
 .bubble-wrap.bottom, .typebox-wrap.bottom { justify-content: flex-end; }
@@ -10,19 +10,19 @@ html.overlay { font: 14px/1.45 "Segoe UI Variable", "Segoe UI", system-ui, sans-
 
 .bubble {
   max-width: 100%; max-height: 100%; overflow: hidden;
-  background: #f7f0e1; border: 3px solid #1e1b2e; border-radius: 14px;
-  box-shadow: 4px 5px 0 #1e1b2e; padding: 10px 14px;
+  background: var(--cream); border: 3px solid var(--ink); border-radius: 14px;
+  box-shadow: 4px 5px 0 var(--ink); padding: 10px 14px;
   animation: pop 0.25s cubic-bezier(0.2, 1.4, 0.4, 1);
   display: flex; flex-direction: column; justify-content: flex-end;
 }
-.bubble .you { font-size: 12.5px; color: #5a5470; margin-bottom: 4px; }
+.bubble .you { font-size: calc(12.5px * var(--read, 1)); color: var(--muted); margin-bottom: 4px; }
 .bubble .you::before { content: "Tú: "; font-weight: 700; }
-.bubble .zenos { font-size: 15px; font-weight: 600; }
+.bubble .zenos { font-size: calc(15px * var(--read, 1)); font-weight: 600; }
 @keyframes pop { from { opacity: 0; transform: translateY(6px) scale(0.96); } }
 
-.typebox { display: flex; gap: 8px; align-items: center; background: #f7f0e1; border: 3px solid #1e1b2e; border-radius: 14px; box-shadow: 4px 5px 0 #1e1b2e; padding: 8px; }
-.typebox input { flex: 1; min-width: 0; font: inherit; border: 2.5px solid #1e1b2e; border-radius: 10px; padding: 7px 10px; background: #fff; outline: none; }
-.typebox button { font: inherit; font-weight: 700; color: #1e1b2e; background: #ffd25e; border: 2.5px solid #1e1b2e; border-radius: 10px; padding: 6px 12px; cursor: pointer; box-shadow: 2px 3px 0 #1e1b2e; }
+.typebox { display: flex; gap: 8px; align-items: center; background: var(--cream); border: 3px solid var(--ink); border-radius: 14px; box-shadow: 4px 5px 0 var(--ink); padding: 8px; }
+.typebox input { color: var(--ink); flex: 1; min-width: 0; font: inherit; border: 2.5px solid var(--ink); border-radius: 10px; padding: 7px 10px; background: var(--paper); outline: none; }
+.typebox button { font: inherit; font-weight: 700; color: var(--on-accent); background: var(--sun); border: 2.5px solid var(--ink); border-radius: 10px; padding: 6px 12px; cursor: pointer; box-shadow: 2px 3px 0 var(--ink); }
 .typebox button:disabled { opacity: 0.45; box-shadow: none; cursor: default; }
-.typebox button.mic { background: #fff; padding: 6px 8px; display: grid; place-items: center; }
-.tip { font-size: 11.5px; color: #1e1b2e; background: #f7f0e1; border: 2px solid #1e1b2e; border-radius: 8px; padding: 0 8px; margin: 8px 2px 0; width: max-content; }
+.typebox button.mic { background: var(--paper); color: var(--ink); padding: 6px 8px; display: grid; place-items: center; }
+.tip { font-size: 11.5px; color: var(--ink); background: var(--cream); border: 2px solid var(--ink); border-radius: 8px; padding: 0 8px; margin: 8px 2px 0; width: max-content; }
