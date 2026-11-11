@@ -384,7 +384,7 @@ async fn listen(app: AppHandle, state: State<'_, AppState>) -> Result<ListenResu
         RecordOutcome::Audio(wav) => {
             let _ = app.emit_to(ORB, "zenos://recorded", ());
             let text = stt::transcribe(&state.http, &c.stt_provider, &key, &c.effective_stt_model(), &c.language, wav).await?;
-            log::write(&format!("transcripción: {text}"));
+            log::write(&format!("transcripción: {}", brief(&text, 200)));
             if text.is_empty() {
                 Ok(ListenResult { kind: "nospeech", text })
             } else {
@@ -402,6 +402,12 @@ fn cancel_listen(state: State<'_, AppState>) {
 }
 
 const MAX_STEPS: usize = 6;
+
+/// Recorta texto para el registro (evita guardar contenido personal completo).
+fn brief(s: &str, max: usize) -> String {
+    let t: String = s.chars().take(max).collect();
+    if s.chars().count() > max { format!("{t}…") } else { t }
+}
 
 fn open_confirm(app: &AppHandle) {
     if let Some(w) = app.get_webview_window(CONFIRM) {
@@ -479,6 +485,7 @@ async fn ask(app: AppHandle, state: State<'_, AppState>, text: String) -> Result
     let system = if c.actions_enabled { format!("{}{}", c.system_prompt, tools::PROMPT) } else { c.system_prompt.clone() };
 
     let mut answer = String::new();
+    let mut tainted = false; // ya se leyó contenido de archivos o carpetas en esta conversación
     for step in 0..MAX_STEPS {
         let raw = ai::chat(
             &state.http,
@@ -487,13 +494,13 @@ async fn ask(app: AppHandle, state: State<'_, AppState>, text: String) -> Result
             ai::ChatRequest { model: &model, system: &system, messages: &messages, max_tokens: c.max_tokens },
         )
         .await?;
-        log::write(&format!("respuesta ({}/{model}) paso {step}: {raw}", provider.id));
+        log::write(&format!("respuesta ({}/{model}) paso {step}: {}", provider.id, brief(&raw, 300)));
         let (visible, action) = if c.actions_enabled { tools::parse_action(&raw) } else { (raw.clone(), None) };
         let Some(action) = action else {
             answer = if visible.is_empty() { "Hecho.".to_string() } else { visible };
             break;
         };
-        let result = if tools::needs_confirm(&c.permission_level, &action) && !confirm_action(&app, &state, &action).await {
+        let result = if tools::needs_confirm(&c.permission_level, &action, tainted) && !confirm_action(&app, &state, &action).await {
             log::write(&format!("acción cancelada por el usuario: {}", tools::describe(&action)));
             "El usuario NO autorizó esta acción. No la repitas; confirma que se canceló.".to_string()
         } else {
@@ -504,7 +511,12 @@ async fn ask(app: AppHandle, state: State<'_, AppState>, text: String) -> Result
                 Err(e) => format!("ERROR: {e}"),
             }
         };
-        log::write(&format!("resultado: {result}"));
+        if matches!(action.tool.as_str(), "leer" | "listar") {
+            tainted = true;
+            log::write(&format!("resultado: ({} caracteres de {})", result.chars().count(), action.tool));
+        } else {
+            log::write(&format!("resultado: {}", brief(&result, 200)));
+        }
         messages.push(ChatMessage { role: "assistant".into(), content: raw });
         messages.push(ChatMessage { role: "user".into(), content: format!("RESULTADO DE LA ACCIÓN: {result}") });
     }

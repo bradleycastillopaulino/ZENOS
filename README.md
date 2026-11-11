@@ -60,6 +60,21 @@ Niveles de permiso (Configuración → Permisos):
 
 Lo que se borra va a la **Papelera** (recuperable). Las carpetas de Windows, Archivos de programa, la raíz de las unidades y tus carpetas personales completas están **siempre protegidas**. La confirmación es una ventana con botones; cerrarla o no responder en 60 s cancela la acción. Puedes desactivar todo esto y dejar solo la conversación.
 
+### Protecciones adicionales
+
+- `abrir` pide confirmación (en Normal) si lleva argumentos, apunta a un `.exe`, `.bat`, `.ps1` y similares, o nombra un intérprete como `powershell` o `cmd`. El diálogo muestra los argumentos completos.
+- Crear o copiar archivos de script (`.bat`, `.ps1`, `.vbs`…) pide confirmación.
+- Después de que el asistente lea archivos o carpetas, abrir una página web pide confirmación (evita que el contenido de un archivo saque datos por una dirección web).
+- La carpeta de Inicio de Windows está protegida contra escritura.
+- El registro (`zenos.log`) no guarda el contenido de los archivos leídos y recorta lo que dices y lo que responde.
+
+## Privacidad
+
+- Tu **audio** se envía a Groq u OpenAI para transcribirlo.
+- Tu **texto** (lo que dices, lo que lee de tus archivos y las respuestas) se envía al proveedor de IA que elijas.
+- Con voces neuronales, el **texto de la respuesta** se envía al servicio de voz de Microsoft Edge; con voces de Windows, no sale de tu PC.
+- Las claves se guardan solo en el Administrador de credenciales de Windows.
+
 ## Voces
 
 Voces neuronales gratuitas con varios caracteres (Dalia, Dalia viva, Elvira, Elvira serena, Jorge, Álvaro, Elena, Salomé) y las voces instaladas en Windows. Las neuronales usan el servicio de lectura de Microsoft Edge, que es **no oficial**: si falla, ZENOS usa la voz de Windows automáticamente.

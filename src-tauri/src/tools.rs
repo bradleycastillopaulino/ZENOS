@@ -151,6 +151,13 @@ pub fn is_protected(path: &Path) -> bool {
     if roots.iter().any(|r| r.to_string_lossy().to_lowercase().replace('\\', "/") == low) {
         return true;
     }
+    // Carpetas donde un programa se ejecuta solo al iniciar sesión (persistencia).
+    if let Ok(appdata) = std::env::var("APPDATA") {
+        let startup = appdata.to_lowercase().replace('\\', "/") + "/microsoft/windows/start menu";
+        if low == startup || low.starts_with(&format!("{startup}/")) {
+            return true;
+        }
+    }
     for var in ["WINDIR", "ProgramFiles", "ProgramFiles(x86)", "ProgramData"] {
         if let Ok(v) = std::env::var(var) {
             let v = v.to_lowercase().replace('\\', "/");
@@ -164,18 +171,61 @@ pub fn is_protected(path: &Path) -> bool {
 
 // ------------------------------------------------------------------ permisos
 
+const RISKY_EXT: &[&str] = &[
+    "exe", "bat", "cmd", "ps1", "psm1", "vbs", "vbe", "js", "jse", "wsf", "wsh", "msi", "msc", "lnk", "scr", "com", "hta", "reg", "jar", "dll", "cpl", "pif",
+];
+const INTERPRETERS: &[&str] = &[
+    "cmd", "powershell", "pwsh", "wscript", "cscript", "mshta", "rundll32", "regsvr32", "msiexec", "reg", "regedit", "wmic", "certutil", "bitsadmin",
+    "schtasks", "sc", "net", "curl", "wget", "bash", "wsl", "python", "node", "mmc", "control",
+];
+
+fn file_name_lower(s: &str) -> String {
+    s.trim().trim_matches('"').replace('\\', "/").rsplit('/').next().unwrap_or("").to_lowercase()
+}
+
+fn has_risky_ext(path: &str) -> bool {
+    let name = file_name_lower(path);
+    name.rsplit_once('.').map(|(_, ext)| RISKY_EXT.contains(&ext)).unwrap_or(false)
+}
+
+/// `abrir` equivale a ejecutar código si lleva argumentos, apunta a un ejecutable/script o nombra un intérprete.
+fn risky_open(a: &Action) -> bool {
+    let params = a.args.get("argumentos").and_then(|v| v.as_str()).unwrap_or("");
+    if !params.trim().is_empty() {
+        return true;
+    }
+    let target = arg(a, "destino").unwrap_or_default();
+    let name = file_name_lower(&target);
+    let stem = name.strip_suffix(".exe").unwrap_or(&name);
+    has_risky_ext(&target) || INTERPRETERS.contains(&stem)
+}
+
+/// Una URL «sospechosa» puede estar sacando datos: usuario@, muy larga o tras haber leído archivos.
+fn risky_url(a: &Action, tainted: bool) -> bool {
+    let url = arg(a, "url").unwrap_or_default();
+    tainted || url.len() > 200 || url.split('/').nth(2).map(|h| h.contains('@')).unwrap_or(false)
+}
+
 /// ¿Esta acción requiere confirmación con el nivel de permisos configurado?
-/// Niveles: "estricto" | "normal" | "libre".
-pub fn needs_confirm(level: &str, a: &Action) -> bool {
+/// Niveles: "estricto" | "normal" | "libre". `tainted` = en esta conversación ya se leyeron archivos o carpetas,
+/// por lo que cualquier orden posterior podría venir de ese contenido.
+pub fn needs_confirm(level: &str, a: &Action, tainted: bool) -> bool {
     let overwrites = match a.tool.as_str() {
-        "escribir" => arg(a, "ruta").map(|r| resolve(&r).exists()).unwrap_or(false),
-        "mover" | "copiar" => arg(a, "destino").map(|r| resolve(&r).exists()).unwrap_or(false),
+        "escribir" => arg(a, "ruta").map(|r| resolve(&r).exists() || has_risky_ext(&r)).unwrap_or(false),
+        "mover" | "copiar" => {
+            arg(a, "destino").map(|r| resolve(&r).exists() || has_risky_ext(&r)).unwrap_or(false)
+        }
         _ => false,
     };
     match level {
         "libre" => false,
-        "estricto" => !matches!(a.tool.as_str(), "listar" | "leer" | "abrir_url"),
-        _ => matches!(a.tool.as_str(), "borrar" | "ejecutar") || overwrites,
+        "estricto" => !matches!(a.tool.as_str(), "listar" | "leer"),
+        _ => {
+            matches!(a.tool.as_str(), "borrar" | "ejecutar")
+                || overwrites
+                || (a.tool == "abrir" && risky_open(a))
+                || (a.tool == "abrir_url" && risky_url(a, tainted))
+        }
     }
 }
 
@@ -183,7 +233,14 @@ pub fn needs_confirm(level: &str, a: &Action) -> bool {
 pub fn describe(a: &Action) -> String {
     let g = |n: &str| arg(a, n).unwrap_or_default();
     match a.tool.as_str() {
-        "abrir" => format!("Abrir «{}»", g("destino")),
+        "abrir" => {
+            let params = a.args.get("argumentos").and_then(|v| v.as_str()).unwrap_or("");
+            if params.trim().is_empty() {
+                format!("Abrir «{}»", g("destino"))
+            } else {
+                format!("Abrir «{}» con los argumentos: {}", g("destino"), params)
+            }
+        }
         "abrir_url" => format!("Abrir la página {}", g("url")),
         "crear_carpeta" => format!("Crear la carpeta {}", resolve(&g("ruta")).display()),
         "listar" => format!("Ver el contenido de {}", resolve(&g("ruta")).display()),
@@ -199,7 +256,7 @@ pub fn describe(a: &Action) -> String {
 
 /// ¿Es una acción que borra o ejecuta código? (se muestra con aviso rojo)
 pub fn is_dangerous(a: &Action) -> bool {
-    matches!(a.tool.as_str(), "borrar" | "ejecutar")
+    matches!(a.tool.as_str(), "borrar" | "ejecutar") || (a.tool == "abrir" && risky_open(a))
 }
 
 // ------------------------------------------------------------------ ejecución
@@ -456,10 +513,50 @@ mod tests {
         let del = act("borrar", json!({"ruta":"escritorio/x"}));
         let mk = act("crear_carpeta", json!({"ruta":"escritorio/x"}));
         let ls = act("listar", json!({"ruta":"escritorio"}));
-        assert!(needs_confirm("normal", &del) && !needs_confirm("normal", &mk) && !needs_confirm("normal", &ls));
-        assert!(needs_confirm("estricto", &mk) && !needs_confirm("estricto", &ls));
-        assert!(!needs_confirm("libre", &del));
-        assert!(needs_confirm("normal", &act("ejecutar", json!({"comando":"dir"}))));
+        assert!(needs_confirm("normal", &del, false) && !needs_confirm("normal", &mk, false) && !needs_confirm("normal", &ls, false));
+        assert!(needs_confirm("estricto", &mk, false) && !needs_confirm("estricto", &ls, false));
+        assert!(!needs_confirm("libre", &del, false));
+        assert!(needs_confirm("normal", &act("ejecutar", json!({"comando":"dir"})), false));
+    }
+
+    #[test]
+    fn open_cannot_bypass_confirmation() {
+        let n = |a: Action, t: bool| needs_confirm("normal", &a, t);
+        // abrir un programa normal sigue sin preguntar
+        assert!(!n(act("abrir", json!({"destino":"notepad"})), false));
+        assert!(!n(act("abrir", json!({"destino":"chrome"})), false));
+        // intérpretes, argumentos y ejecutables/scripts sí
+        assert!(n(act("abrir", json!({"destino":"powershell","argumentos":"-c calc"})), false));
+        assert!(n(act("abrir", json!({"destino":"PowerShell.exe"})), false));
+        assert!(n(act("abrir", json!({"destino":"cmd"})), false));
+        assert!(n(act("abrir", json!({"destino":"notepad","argumentos":"x.txt"})), false));
+        assert!(n(act("abrir", json!({"destino":"escritorio/x.bat"})), false));
+        assert!(n(act("abrir", json!({"destino":"C:\\temp\\setup.exe"})), false));
+        // crear scripts nuevos también pregunta
+        assert!(n(act("escribir", json!({"ruta":"escritorio/nuevo.ps1","contenido":"x"})), false));
+        assert!(n(act("copiar", json!({"origen":"a.txt","destino":"escritorio/x.cmd"})), false));
+        // URLs: normal sin leer archivos no pregunta; tras leer, sí; con usuario@ o muy larga, sí
+        let url = |u: &str| act("abrir_url", json!({"url": u}));
+        assert!(!n(url("https://youtube.com"), false));
+        assert!(n(url("https://youtube.com"), true));
+        assert!(n(url("https://a@evil.com/x"), false));
+        assert!(n(url(&format!("https://x.com/?d={}", "a".repeat(250))), false));
+        // estricto pregunta también las URL
+        assert!(needs_confirm("estricto", &url("https://youtube.com"), false));
+        assert!(!needs_confirm("libre", &url("https://a@evil.com"), true));
+    }
+
+    #[test]
+    fn describe_shows_arguments() {
+        let d = describe(&act("abrir", json!({"destino":"powershell","argumentos":"-c calc"})));
+        assert!(d.contains("-c calc") && is_dangerous(&act("abrir", json!({"destino":"powershell"}))));
+    }
+
+    #[test]
+    fn startup_folder_is_protected() {
+        std::env::set_var("APPDATA", "/tmp/zenos-appdata");
+        assert!(is_protected(Path::new("/tmp/zenos-appdata/Microsoft/Windows/Start Menu/Programs/Startup/x.bat")));
+        assert!(!is_protected(Path::new("/tmp/zenos-appdata/otra/cosa.txt")));
     }
 
     #[test]
