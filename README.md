@@ -92,6 +92,12 @@ Puedes elegir entre cuatro avatares en **Apariencia → Esfera**, y cada uno hab
 
 Todos comparten el mismo contexto: ZENOS lo creó **Bradley Castillo, «la cabra»**, y ayuda con preguntas, curiosidades y tareas básicas de Windows. Los textos están en `src-tauri/src/persona.rs`. Los datos de contexto no incluyen internet ni la hora: ZENOS no navega ni ve la pantalla.
 
+## Idioma y conversación continua
+
+- **Idioma** (Configuración → Voz): español, inglés, francés o portugués. Cambia el idioma de las respuestas, de la voz (cada idioma tiene sus voces), del reconocimiento y de los menús principales. Los textos largos de ayuda aún están solo en español.
+- **Conversación continua** (Configuración → Atajo, activada por defecto): al activar a ZENOS puedes hacerle preguntas seguidas sin volver a activarlo. Pulsa el atajo **mientras habla** para interrumpirlo (te escucha enseguida) o **mientras te escucha** para terminar. `Esc` termina en cualquier momento, y si guardas silencio la conversación se cierra sola. Interrumpir con la voz (sin pulsar nada) no está implementado: con altavoces el micrófono oiría a ZENOS.
+- Si las voces neuronales fallan, el botón «Escuchar» ahora indica qué motor sonó y por qué.
+
 ## Lectura y escritura
 
 En Configuración → Texto:
@@ -184,3 +190,7 @@ Las claves API nunca llegan al frontend: Rust las lee del Administrador de crede
 3. GitHub Actions (`.github/workflows/release.yml`) ejecuta las pruebas, compila el instalador y lo publica en **Releases**.
 
 Cada `push` a `main` ejecuta además `ci.yml`, que prueba y deja el instalador como artefacto descargable de la ejecución.
+
+## Licencias de terceros
+
+`src-tauri/src/gec.rs` es una adaptación a Rust del módulo `drm.py` de [edge-tts](https://github.com/rany2/edge-tts) (LGPL-3.0-or-later) y mantiene esa licencia. El servicio de voces neuronales es no oficial y puede cambiar sin aviso; ZENOS vuelve solo a la voz de Windows si falla.

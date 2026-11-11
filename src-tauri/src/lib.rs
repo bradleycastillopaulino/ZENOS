@@ -3,6 +3,7 @@ mod audio;
 mod config;
 mod log;
 mod neural;
+mod gec;
 mod persona;
 mod secrets;
 mod stt;
@@ -697,15 +698,17 @@ async fn test_mic(app: AppHandle, device: String) -> Result<f32, String> {
 }
 
 #[tauri::command]
-async fn test_speaker(app: AppHandle, state: State<'_, AppState>, device: String, voice: String) -> Result<(), String> {
+async fn test_speaker(app: AppHandle, state: State<'_, AppState>, device: String, voice: String) -> Result<String, String> {
     // Se prueba con la voz y el altavoz elegidos en pantalla, aunque aún no estén guardados.
     let saved = cfg(&state);
     if voice != saved.voice {
         state.config.lock().unwrap().voice = voice;
     }
-    let r = speak_inner(&app, &state, vec!["Hola, soy Zenos. Si me escuchas, el altavoz funciona.".into()], Some(device), (SETTINGS, "zenos://test-level")).await;
+    tts::retry_neural(); // la prueba siempre vuelve a intentar la voz neuronal
+    let phrase = persona::test_phrase(&saved.language).to_string();
+    let r = speak_inner(&app, &state, vec![phrase], Some(device), (SETTINGS, "zenos://test-level")).await;
     state.config.lock().unwrap().voice = saved.voice;
-    r
+    r.map(|_| tts::status())
 }
 
 /// Verifica la clave probando modelos conocidos hasta que uno responda; guarda clave y modelo.
@@ -781,8 +784,22 @@ async fn setup_stt(state: State<'_, AppState>, provider: String, key: String) ->
 }
 
 #[tauri::command]
-async fn list_voices() -> Result<Vec<tts::Voice>, String> {
-    tauri::async_runtime::spawn_blocking(tts::list).await.map_err(|e| e.to_string())?
+async fn list_voices(language: String) -> Result<Vec<tts::Voice>, String> {
+    tauri::async_runtime::spawn_blocking(move || tts::list(&language)).await.map_err(|e| e.to_string())?
+}
+
+/// Cierra la ventana de configuración (el permiso `core:window:allow-close` no se concede al JS).
+#[tauri::command]
+fn close_settings(app: AppHandle) {
+    if let Some(w) = app.get_webview_window(SETTINGS) {
+        let _ = w.close();
+    }
+}
+
+/// Estado de la última síntesis: qué motor se usó y por qué falló el neuronal, si falló.
+#[tauri::command]
+fn voice_status() -> String {
+    tts::status()
 }
 
 /// La esfera avisa cuando hay actividad: mientras tanto Esc cancela.
@@ -1016,6 +1033,8 @@ pub fn run() {
             hide_orb,
             show_orb_cmd,
             open_settings_cmd,
+            close_settings,
+            voice_status,
             get_autostart,
             open_url,
             set_autostart,

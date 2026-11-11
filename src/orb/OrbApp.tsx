@@ -7,7 +7,8 @@ const HIDE_DELAY_MS = 700;
 
 /**
  * Ciclo del asistente: escuchar → procesar → hablar → reposo.
- * El atajo inicia el ciclo; pulsarlo de nuevo (o Esc) lo cancela.
+ * El atajo inicia la conversación; con «conversación continua» se repite escuchar → responder.
+ * Pulsarlo mientras habla ZENOS lo interrumpe y vuelve a escuchar; mientras escucha (o con Esc) la termina.
  */
 export function OrbApp() {
   const [phase, setPhase] = useState<Phase>("hidden");
@@ -49,21 +50,29 @@ export function OrbApp() {
     const gen = ++generation.current;
     window.clearTimeout(hideTimer.current);
     void api.setActive(true);
-    micLevel.current = 0;
-    if (!typed) go("listening");
-    else go("thinking");
+    // Conversación continua: tras responder vuelve a escuchar hasta que se cancele o haya silencio.
+    const continuous = !typed && !!config.current?.conversation && config.current?.hotkeyMode !== "hold";
     try {
-      const heard = typed ? ({ kind: "text", text: typed } as const) : await api.listen();
-      if (gen !== generation.current) return;
-      if (heard.kind !== "text") return rest(gen);
+      let first = true;
+      for (;;) {
+        micLevel.current = 0;
+        const useTyped = first && !!typed;
+        go(useTyped ? "thinking" : "listening");
+        const heard = useTyped ? ({ kind: "text", text: typed } as const) : await api.listen();
+        first = false;
+        if (gen !== generation.current) return;
+        if (heard.kind !== "text") break;
 
-      go("thinking");
-      const reply = await api.ask(heard.text);
-      if (gen !== generation.current) return;
+        go("thinking");
+        const reply = await api.ask(heard.text);
+        if (gen !== generation.current) return;
 
-      go("speaking");
-      micLevel.current = 0;
-      await say(reply.chunks);
+        go("speaking");
+        micLevel.current = 0;
+        await say(reply.chunks); // si se interrumpe con el atajo, termina antes y se pasa a escuchar
+        if (gen !== generation.current) return;
+        if (!continuous) break;
+      }
     } catch (e) {
       if (gen !== generation.current) return;
       go("error");
@@ -96,7 +105,9 @@ export function OrbApp() {
       listen("zenos://hotkey", () => {
         const p = phaseRef.current;
         if (p === "hidden" || p === "idle") void run();
-        else if (config.current?.hotkeyMode !== "hold") cancel();
+        else if (config.current?.hotkeyMode === "hold") return;
+        else if (p === "speaking" && config.current?.conversation) void api.stopSpeaking(); // interrumpe y escucha
+        else cancel(); // escuchando o pensando: termina la conversación
       }),
       listen("zenos://hotkey-up", () => {
         if (config.current?.hotkeyMode === "hold" && phaseRef.current === "listening") void api.stopListen();

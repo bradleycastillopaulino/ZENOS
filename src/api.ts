@@ -6,6 +6,7 @@ export interface AppConfig {
   sttProvider: string;
   sttModel: string;
   language: string;
+  conversation: boolean;
   systemPrompt: string;
   maxTokens: number;
   historyTurns: number;
@@ -89,10 +90,12 @@ export const api = {
   stopSpeaking: () => invoke<void>("stop_speaking"),
   listDevices: () => invoke<{ inputs: string[]; outputs: string[] }>("list_devices"),
   testMic: (device: string) => invoke<number>("test_mic", { device }),
-  testSpeaker: (device: string, voice: string) => invoke<void>("test_speaker", { device, voice }),
+  testSpeaker: (device: string, voice: string) => invoke<string>("test_speaker", { device, voice }),
+  voiceStatus: () => invoke<string>("voice_status"),
+  closeSettings: () => invoke<void>("close_settings"),
   setupProvider: (provider: string, key: string) => invoke<string>("setup_provider", { provider, key }),
   setupStt: (provider: string, key: string) => invoke<void>("setup_stt", { provider, key }),
-  listVoices: () => invoke<Voice[]>("list_voices"),
+  listVoices: (language: string) => invoke<Voice[]>("list_voices", { language }),
   setActive: (active: boolean) => invoke<void>("set_active", { active }),
   hideOrb: () => invoke<void>("hide_orb"),
   getAutostart: () => invoke<boolean>("get_autostart"),

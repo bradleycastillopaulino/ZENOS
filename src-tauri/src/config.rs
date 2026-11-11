@@ -17,7 +17,10 @@ pub struct AppConfig {
     pub stt_provider: String,
     /// Modelo de transcripción. Vacío = por defecto del servicio.
     pub stt_model: String,
+    /// Idioma del asistente y de la interfaz: es | en | fr | pt
     pub language: String,
+    /// Conversación continua: tras activarlo se pueden hacer varias preguntas seguidas.
+    pub conversation: bool,
     pub system_prompt: String,
     pub max_tokens: u32,
     /// Turnos de conversación recordados (pregunta + respuesta).
@@ -77,6 +80,7 @@ impl Default for AppConfig {
             stt_provider: "groq".into(),
             stt_model: String::new(),
             language: "es".into(),
+            conversation: true,
             system_prompt: "Eres ZENOS, un asistente de voz. Responde siempre en español, de forma \
                 natural, clara y breve (normalmente una a tres frases). Tu respuesta se leerá en voz \
                 alta: no uses markdown, listas, emojis, tablas ni código."
@@ -144,6 +148,7 @@ impl AppConfig {
         if self.hotkey.trim().is_empty() {
             self.hotkey = d.hotkey;
         }
+        self.language = crate::persona::language_name(&self.language).0.to_string();
         if !matches!(self.hotkey_mode.as_str(), "toggle" | "hold") {
             self.hotkey_mode = d.hotkey_mode;
         }
@@ -217,6 +222,9 @@ mod tests {
         assert_eq!((c.ui_theme.as_str(), c.read_size), ("crema", 2.0));
         assert_eq!(c.avatar, "formas");
         assert_eq!(c.orb_scale, 1.8);
+        let c: AppConfig = serde_json::from_str(r#"{"language":"pt-BR"}"#).unwrap();
+        assert_eq!(c.sanitize().language, "pt");
+        assert!(AppConfig::default().conversation);
     }
 
     #[test]

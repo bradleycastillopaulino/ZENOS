@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import { api, errorText, type AppConfig, type ProviderInfo, type Voice } from "../api";
 import { AVATARS, AvatarIcon, THEMES } from "../orb/Orb";
 import { UI_THEMES, applyReadSize, applyUiTheme } from "../theme";
+import { LANGS, tr } from "../i18n";
 import "./settings.css";
 
 type Note = { kind: "ok" | "error" | "info"; text: string } | null;
@@ -134,15 +134,17 @@ function DevicePicker({ input, output, onChange }: { input: string; output: stri
   );
 }
 
-function VoicePicker({ voice, output, onChange }: { voice: string; output: string; onChange: (v: string) => void }) {
+function VoicePicker({ voice, output, language, onChange }: { voice: string; output: string; language: string; onChange: (v: string) => void }) {
   const [voices, setVoices] = useState<Voice[]>([]);
   const [note, setNote] = useState<Note>(null);
   const [busy, setBusy] = useState(false);
   useEffect(() => {
-    void api.listVoices().then(setVoices).catch(() => setVoices([]));
-  }, []);
+    void api.listVoices(language).then(setVoices).catch(() => setVoices([]));
+  }, [language]);
 
-  const current = voice === "" ? "edge:dalia" : voice.startsWith("edge:") || voice.startsWith("win:") ? voice : `win:${voice}`;
+  // Si la voz guardada no es del idioma elegido, se muestra la primera disponible de ese idioma.
+  const raw = voice === "" ? "" : voice.startsWith("edge:") || voice.startsWith("win:") ? voice : `win:${voice}`;
+  const current = voices.some((v) => v.id === raw) ? raw : (voices[0]?.id ?? raw);
   const neural = voices.filter((v) => v.kind === "neural");
   const windows = voices.filter((v) => v.kind === "windows");
 
@@ -150,8 +152,9 @@ function VoicePicker({ voice, output, onChange }: { voice: string; output: strin
     setBusy(true);
     setNote({ kind: "info", text: "Generando la voz…" });
     try {
-      await api.testSpeaker(output, current);
-      setNote({ kind: "ok", text: "Si no sonó natural, puede que el servicio de voces no esté disponible y se usó la voz de Windows." });
+      const engine = await api.testSpeaker(output, current);
+      const fallback = engine.startsWith("Voz de Windows") && current.startsWith("edge:");
+      setNote({ kind: fallback ? "error" : "ok", text: fallback ? `${engine}. Las voces neuronales necesitan internet y el servicio gratuito de Microsoft; mientras tanto suena la voz de Windows más parecida.` : engine });
     } catch (e) {
       setNote({ kind: "error", text: errorText(e) });
     } finally {
@@ -161,7 +164,7 @@ function VoicePicker({ voice, output, onChange }: { voice: string; output: strin
 
   return (
     <div className="field">
-      <label>Voz del asistente</label>
+      <label>{tr(language, "voiceLabel")}</label>
       <div className="row">
         <select value={current} onChange={(e) => onChange(e.target.value)}>
           <optgroup label="Voces neuronales (necesitan internet)">
@@ -182,7 +185,7 @@ function VoicePicker({ voice, output, onChange }: { voice: string; output: strin
           )}
         </select>
         <button className="ghost" disabled={busy} onClick={() => void test()}>
-          Escuchar
+          {tr(language, "listen")}
         </button>
       </div>
       {busy && <LevelBar />}
@@ -442,6 +445,7 @@ function Wizard({ initial, providers, onFinish }: { initial: AppConfig; provider
         voice: cfg.voice,
         theme: cfg.theme,
         permissionLevel: cfg.permissionLevel,
+        language: cfg.language,
         setupDone: true,
       });
       await api.setAutostart(autostart);
@@ -471,6 +475,16 @@ function Wizard({ initial, providers, onFinish }: { initial: AppConfig; provider
               Tu asistente de voz. Pulsa <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>Espacio</kbd>, habla y escucha la respuesta. También puede abrir programas y manejar tus archivos.
             </p>
             <p className="hint">Vamos a dejarlo listo en un minuto.</p>
+            <div className="field" style={{ maxWidth: 260, margin: "0 auto" }}>
+              <label>Idioma · Language</label>
+              <select value={cfg.language} onChange={(e) => { set("language", e.target.value); set("voice", ""); }}>
+                {LANGS.map((l) => (
+                  <option key={l.id} value={l.id}>
+                    {l.name}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
         )}
 
@@ -510,7 +524,18 @@ function Wizard({ initial, providers, onFinish }: { initial: AppConfig; provider
           <>
             <h2>Elige su voz</h2>
             <p className="hint">Escucha cada una y quédate con la que más te guste.</p>
-            <VoicePicker voice={cfg.voice} output={cfg.outputDevice} onChange={(v) => set("voice", v)} />
+            <div className="field">
+                <label>{tr(cfg.language, "language")}</label>
+                <select value={cfg.language} onChange={(e) => { set("language", e.target.value); set("voice", ""); }}>
+                  {LANGS.map((l) => (
+                    <option key={l.id} value={l.id}>
+                      {l.name}
+                    </option>
+                  ))}
+                </select>
+                <p className="hint">{tr(cfg.language, "languageHint")}</p>
+              </div>
+              <VoicePicker voice={cfg.voice} output={cfg.outputDevice} language={cfg.language} onChange={(v) => set("voice", v)} />
           </>
         )}
 
@@ -552,16 +577,16 @@ function Wizard({ initial, providers, onFinish }: { initial: AppConfig; provider
       <div className="nav">
         {step > 0 && name !== "Listo" ? (
           <button className="ghost" onClick={() => setStep(step - 1)}>
-            Atrás
+            {tr(cfg.language, "back")}
           </button>
         ) : (
           <span />
         )}
         {name === "Listo" ? (
-          <button onClick={() => void finish()}>Empezar a usar ZENOS</button>
+          <button onClick={() => void finish()}>{tr(cfg.language, "finish")}</button>
         ) : (
           <button disabled={!canNext} onClick={() => setStep(step + 1)}>
-            {name === "Bienvenida" ? "Empezar" : "Siguiente"}
+            {name === "Bienvenida" ? tr(cfg.language, "start") : tr(cfg.language, "next")}
           </button>
         )}
       </div>
@@ -624,7 +649,7 @@ function Panel({ initial, providers, rerun }: { initial: AppConfig; providers: P
       await api.setAutostart(autostart);
       setCfg(out);
       setDirty(false);
-      setSaved({ kind: "ok", text: "Cambios guardados." });
+      setSaved({ kind: "ok", text: tr(cfg.language, "saved") });
     } catch (e) {
       setSaved({ kind: "error", text: errorText(e) });
     }
@@ -643,6 +668,34 @@ function Panel({ initial, providers, rerun }: { initial: AppConfig; providers: P
 
   const needsStt = cfg.provider !== "groq" && cfg.provider !== "openai";
 
+  /** Cambiar de proveedor: con clave guardada se aplica ya; sin clave se pide en el momento. */
+  const pickProvider = async (id: string) => {
+    setAiNote(null);
+    if (!keys[id]) {
+      setCfg((c) => ({ ...c, provider: id, model: "" }));
+      setShowKey(true);
+      setAiNote({ kind: "info", text: `Pega la clave de ${providers.find((p) => p.id === id)?.name ?? id} para empezar a usarlo.` });
+      return;
+    }
+    try {
+      const out = await api.saveConfig({ ...cfg, provider: id, model: "" });
+      setCfg(out);
+      setShowKey(false);
+      setAiNote({ kind: "ok", text: `Ahora usas ${providers.find((p) => p.id === id)?.name ?? id}.` });
+    } catch (e) {
+      setAiNote({ kind: "error", text: errorText(e) });
+    }
+  };
+
+  /** Tras verificar una clave el asistente ya guardó proveedor y modelo: se vuelve a leer para no pisarlos. */
+  const syncProvider = async () => {
+    const fresh = await api.getConfig();
+    setCfg((c) => ({ ...c, provider: fresh.provider, model: fresh.model, sttProvider: fresh.sttProvider }));
+    refreshKeys();
+    setShowKey(false);
+    setAiNote({ kind: "ok", text: `Clave guardada. Usas ${providers.find((p) => p.id === fresh.provider)?.name ?? fresh.provider} · ${fresh.model}.` });
+  };
+
   return (
     <div className="shell">
       <nav>
@@ -652,7 +705,7 @@ function Panel({ initial, providers, rerun }: { initial: AppConfig; providers: P
         </div>
         {PAGES.map((p) => (
           <button key={p.id} className={p.id === page ? "nv on" : "nv"} onClick={() => setPage(p.id)}>
-            {p.name}
+            {tr(cfg.language, p.id)}
           </button>
         ))}
       </nav>
@@ -661,7 +714,7 @@ function Panel({ initial, providers, rerun }: { initial: AppConfig; providers: P
         <div className="content" key={page}>
           {page === "inicio" && (
             <>
-              <h2>Inicio</h2>
+              <h2>{tr(cfg.language, "inicio")}</h2>
               <div className="card">
                 <div className="lbl">Inteligencia</div>
                 <b>{info?.name}</b> · {cfg.model || info?.defaultModel} · clave {keys[cfg.provider] ? "guardada" : <span className="bad">falta</span>}
@@ -690,10 +743,10 @@ function Panel({ initial, providers, rerun }: { initial: AppConfig; providers: P
 
           {page === "ia" && (
             <>
-              <h2>Inteligencia artificial</h2>
+              <h2>{tr(cfg.language, "ia")}</h2>
               <div className="field">
                 <label>Proveedor</label>
-                <select value={cfg.provider} onChange={(e) => { set("provider", e.target.value); set("model", ""); }}>
+                <select value={cfg.provider} onChange={(e) => void pickProvider(e.target.value)}>
                   {providers.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.name} {keys[p.id] ? "· clave guardada" : ""}
@@ -725,11 +778,7 @@ function Panel({ initial, providers, rerun }: { initial: AppConfig; providers: P
                   key={cfg.provider}
                   providers={providers.filter((p) => p.id === cfg.provider)}
                   initial={cfg.provider}
-                  onDone={(_, model) => {
-                    set("model", model);
-                    refreshKeys();
-                    setShowKey(false);
-                  }}
+                  onDone={() => void syncProvider()}
                 />
               )}
               {needsStt && (
@@ -744,8 +793,19 @@ function Panel({ initial, providers, rerun }: { initial: AppConfig; providers: P
 
           {page === "voz" && (
             <>
-              <h2>Voz</h2>
-              <VoicePicker voice={cfg.voice} output={cfg.outputDevice} onChange={(v) => set("voice", v)} />
+              <h2>{tr(cfg.language, "voz")}</h2>
+              <div className="field">
+                <label>{tr(cfg.language, "language")}</label>
+                <select value={cfg.language} onChange={(e) => { set("language", e.target.value); set("voice", ""); }}>
+                  {LANGS.map((l) => (
+                    <option key={l.id} value={l.id}>
+                      {l.name}
+                    </option>
+                  ))}
+                </select>
+                <p className="hint">{tr(cfg.language, "languageHint")}</p>
+              </div>
+              <VoicePicker voice={cfg.voice} output={cfg.outputDevice} language={cfg.language} onChange={(v) => set("voice", v)} />
               <div className="field">
                 <label>Velocidad: {cfg.voiceRate.toFixed(1)}×</label>
                 <input type="range" min={0.6} max={1.6} step={0.1} value={cfg.voiceRate} onChange={(e) => set("voiceRate", Number(e.target.value))} />
@@ -759,14 +819,14 @@ function Panel({ initial, providers, rerun }: { initial: AppConfig; providers: P
 
           {page === "audio" && (
             <>
-              <h2>Audio</h2>
+              <h2>{tr(cfg.language, "audio")}</h2>
               <DevicePicker input={cfg.inputDevice} output={cfg.outputDevice} onChange={(i, o) => { set("inputDevice", i); set("outputDevice", o); }} />
             </>
           )}
 
           {page === "texto" && (
             <>
-              <h2>Texto</h2>
+              <h2>{tr(cfg.language, "texto")}</h2>
               <label className="check">
                 <input type="checkbox" checked={cfg.readAlong} onChange={(e) => set("readAlong", e.target.checked)} />
                 <span>
@@ -786,7 +846,7 @@ function Panel({ initial, providers, rerun }: { initial: AppConfig; providers: P
 
           {page === "apariencia" && (
             <>
-              <h2>Apariencia</h2>
+              <h2>{tr(cfg.language, "apariencia")}</h2>
               <div className="field">
                 <label>Tema de la interfaz</label>
                 <UiThemePicker value={cfg.uiTheme} onChange={(t) => set("uiTheme", t)} />
@@ -840,7 +900,7 @@ function Panel({ initial, providers, rerun }: { initial: AppConfig; providers: P
 
           {page === "permisos" && (
             <>
-              <h2>Permisos</h2>
+              <h2>{tr(cfg.language, "permisos")}</h2>
               <label className="check">
                 <input type="checkbox" checked={cfg.actionsEnabled} onChange={(e) => set("actionsEnabled", e.target.checked)} />
                 Permitir que el asistente abra programas, maneje archivos y ejecute comandos
@@ -852,7 +912,7 @@ function Panel({ initial, providers, rerun }: { initial: AppConfig; providers: P
 
           {page === "atajo" && (
             <>
-              <h2>Atajo y activación</h2>
+              <h2>{tr(cfg.language, "atajo")}</h2>
               <div className="field">
                 <label>Combinación (haz clic y pulsa las teclas)</label>
                 <HotkeyInput value={cfg.hotkey} onChange={(v) => set("hotkey", v)} />
@@ -869,6 +929,12 @@ function Panel({ initial, providers, rerun }: { initial: AppConfig; providers: P
                 </div>
               </div>
               <label className="check">
+                <input type="checkbox" checked={cfg.conversation} onChange={(e) => set("conversation", e.target.checked)} />
+                <span>
+                  <b>{tr(cfg.language, "conversation")}:</b> {tr(cfg.language, "conversationHint")}
+                </span>
+              </label>
+              <label className="check">
                 <input type="checkbox" checked={cfg.wakeWord} onChange={(e) => set("wakeWord", e.target.checked)} />
                 Activar diciendo «Oye Zenos» (experimental)
               </label>
@@ -881,7 +947,7 @@ function Panel({ initial, providers, rerun }: { initial: AppConfig; providers: P
 
           {page === "ayuda" && (
             <>
-              <h2>Ayuda</h2>
+              <h2>{tr(cfg.language, "ayuda")}</h2>
               <p className="hint">Registro de errores (envíalo si algo falla):</p>
               <code className="path">{logFile}</code>
               <p>
@@ -896,7 +962,7 @@ function Panel({ initial, providers, rerun }: { initial: AppConfig; providers: P
         <footer>
           <Message note={saved} />
           <button disabled={!dirty} onClick={() => void save()}>
-            Guardar cambios
+            {tr(cfg.language, "save")}
           </button>
         </footer>
       </main>
@@ -922,7 +988,7 @@ export function Settings() {
 
   if (!cfg) return null;
   if (wizard) {
-    return <Wizard initial={cfg} providers={providers} onFinish={() => void getCurrentWindow().close()} />;
+    return <Wizard initial={cfg} providers={providers} onFinish={() => void api.closeSettings()} />;
   }
   return <Panel initial={cfg} providers={providers} rerun={() => setWizard(true)} />;
 }
