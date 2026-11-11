@@ -1,0 +1,49 @@
+name: Release
+
+# Publica el instalador al crear una etiqueta de versión, p. ej.:
+#   git tag v0.1.0 && git push origin v0.1.0
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Instalador de Windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - run: npm ci
+
+      - name: Tests
+        run: |
+          npm run build
+          cargo test --manifest-path src-tauri/Cargo.toml
+
+      - name: Compilar y publicar la versión
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "AI Star ${{ github.ref_name }}"
+          releaseBody: |
+            Descarga **AI Star_*_x64-setup.exe**, instálalo y configura tu proveedor de IA y tu clave API.
+            Consulta el README para más detalles.
+          releaseDraft: false
+          prerelease: false

@@ -1,0 +1,23 @@
+# Dependencias y compilación
+node_modules/
+dist/
+dist-ssr/
+src-tauri/target/
+src-tauri/gen/
+
+# Secretos: nunca subir claves ni archivos de entorno
+.env
+.env.*
+*.key
+*.pem
+config.local.json
+
+# Registros y sistema
+logs/
+*.log
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.local

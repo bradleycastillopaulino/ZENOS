@@ -1,0 +1,242 @@
+html.settings {
+  color-scheme: dark;
+  --bg: #06110f;
+  --panel: #0b1c19;
+  --line: #17322d;
+  --text: #dff7ef;
+  --muted: #86a8a0;
+  --accent: #19e3a1;
+  --accent-dim: #0f8f68;
+  --danger: #ff6b6b;
+  background: var(--bg);
+}
+html.settings body {
+  margin: 0;
+  background: radial-gradient(ellipse 80% 40% at 50% -10%, rgba(25, 227, 161, 0.12), transparent 70%), var(--bg);
+  color: var(--text);
+  font: 14px/1.45 "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+}
+.loading {
+  padding: 40px;
+  color: var(--muted);
+}
+main {
+  max-width: 440px;
+  margin: 0 auto;
+  padding: 20px 20px 96px;
+}
+header {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  margin-bottom: 18px;
+}
+header h1 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+header p {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+.mini-orb {
+  flex: none;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 34% 28%, rgba(255, 255, 255, 0.35), transparent 30%),
+    radial-gradient(circle at 50% 58%, #06352c 0%, #0b6b55 70%, #6fffd4 100%);
+  box-shadow:
+    0 0 18px rgba(25, 227, 161, 0.55),
+    inset 0 0 6px rgba(150, 255, 220, 0.8);
+}
+kbd {
+  font: 12px "Cascadia Code", Consolas, monospace;
+  padding: 1px 6px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: #0f2622;
+  color: var(--text);
+}
+section {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px 16px 16px;
+  margin-bottom: 14px;
+}
+h2 {
+  margin: 0 0 12px;
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--accent);
+}
+.grid2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.field {
+  margin-bottom: 12px;
+  min-width: 0;
+}
+.field label {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.row {
+  display: flex;
+  gap: 6px;
+}
+.row input {
+  flex: 1;
+  min-width: 0;
+}
+input,
+select,
+textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: #071512;
+  color: var(--text);
+  font: inherit;
+  outline: none;
+}
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--accent-dim);
+  box-shadow: 0 0 0 3px rgba(25, 227, 161, 0.12);
+}
+input[type="range"] {
+  padding: 0;
+  accent-color: var(--accent);
+  border: none;
+  background: none;
+  box-shadow: none;
+}
+textarea {
+  resize: vertical;
+}
+button {
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--accent-dim);
+  background: #0f3a30;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+button:hover:not(:disabled) {
+  background: #145043;
+}
+button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #032019;
+  font-weight: 600;
+}
+button.primary:hover:not(:disabled) {
+  background: #3ff0b6;
+}
+button.ghost {
+  background: transparent;
+  border-color: var(--line);
+  color: var(--muted);
+}
+.chip {
+  margin-left: 4px;
+  padding: 0 7px;
+  border-radius: 10px;
+  font-size: 11px;
+}
+.chip.ok {
+  background: rgba(25, 227, 161, 0.15);
+  color: var(--accent);
+}
+.chip.missing {
+  background: rgba(255, 107, 107, 0.15);
+  color: var(--danger);
+}
+.hint {
+  display: block;
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  text-decoration: none;
+  word-break: break-all;
+}
+a.hint:hover {
+  color: var(--accent);
+}
+.warn {
+  margin: 6px 0 0;
+  color: #ffc46b;
+  font-size: 12px;
+}
+.check {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 6px 0;
+  cursor: pointer;
+}
+.check input {
+  width: auto;
+  accent-color: var(--accent);
+}
+details {
+  margin-top: 10px;
+}
+summary {
+  cursor: pointer;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+footer {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 12px 20px;
+  background: linear-gradient(transparent, var(--bg) 35%);
+}
+.notice {
+  flex: 1;
+  font-size: 12.5px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  max-height: 60px;
+  overflow: auto;
+}
+.notice.ok {
+  background: rgba(25, 227, 161, 0.12);
+  color: var(--accent);
+}
+.notice.error {
+  background: rgba(255, 107, 107, 0.12);
+  color: var(--danger);
+}
+.notice.info {
+  background: rgba(134, 168, 160, 0.12);
+  color: var(--muted);
+}

@@ -1,0 +1,132 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+import { listen } from "@tauri-apps/api/event";
+import { api, errorText, type AppConfig } from "../api";
+import { Player } from "../player";
+import { Orb, type Phase } from "./Orb";
+
+const HIDE_DELAY_MS = 700;
+
+/**
+ * Ciclo del asistente: escuchar → procesar → hablar → reposo.
+ * El atajo inicia el ciclo; pulsarlo de nuevo (o Esc) lo cancela.
+ */
+export function OrbApp() {
+  const [phase, setPhase] = useState<Phase>("hidden");
+  const phaseRef = useRef<Phase>("hidden");
+  const stageRef = useRef<HTMLDivElement>(null);
+  const player = useRef(new Player());
+  const generation = useRef(0);
+  const config = useRef<AppConfig | null>(null);
+  const micLevel = useRef(0);
+  const hideTimer = useRef<number | undefined>(undefined);
+
+  const go = useCallback((p: Phase) => {
+    phaseRef.current = p;
+    setPhase(p);
+  }, []);
+
+  // Animación del nivel: escribe --level directamente (sin re-render de React).
+  useEffect(() => {
+    let raf = 0;
+    let current = 0;
+    const tick = () => {
+      const p = phaseRef.current;
+      const target = p === "listening" ? micLevel.current : p === "speaking" ? player.current.level() : 0;
+      current += (target - current) * (target > current ? 0.45 : 0.12);
+      stageRef.current?.style.setProperty("--level", current.toFixed(3));
+      raf = p === "hidden" && current < 0.001 ? 0 : requestAnimationFrame(tick);
+      if (!raf) stageRef.current?.style.setProperty("--level", "0");
+    };
+    if (phase !== "hidden") raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [phase]);
+
+  const rest = useCallback(
+    (gen: number) => {
+      if (gen !== generation.current) return;
+      void api.setActive(false);
+      go("idle");
+      window.clearTimeout(hideTimer.current);
+      hideTimer.current = window.setTimeout(() => {
+        if (gen !== generation.current || config.current?.orbAlwaysVisible) return;
+        go("hidden");
+        window.setTimeout(() => {
+          if (phaseRef.current === "hidden") void api.hideOrb();
+        }, 550);
+      }, HIDE_DELAY_MS);
+    },
+    [go],
+  );
+
+  const say = useCallback(async (chunks: string[]) => {
+    await player.current.speak(chunks, config.current?.voiceVolume ?? 1);
+  }, []);
+
+  const run = useCallback(async () => {
+    const gen = ++generation.current;
+    window.clearTimeout(hideTimer.current);
+    void api.setActive(true);
+    micLevel.current = 0;
+    go("listening");
+    try {
+      const heard = await api.listen();
+      if (gen !== generation.current) return;
+      if (heard.kind !== "text") return rest(gen);
+
+      go("thinking");
+      const reply = await api.ask(heard.text);
+      if (gen !== generation.current) return;
+
+      go("speaking");
+      await say(reply.chunks);
+    } catch (e) {
+      if (gen !== generation.current) return;
+      go("error");
+      try {
+        await say([errorText(e)]);
+      } catch {
+        await new Promise((r) => setTimeout(r, 1500));
+      }
+    } finally {
+      rest(gen);
+    }
+  }, [go, rest, say]);
+
+  const cancel = useCallback(() => {
+    const gen = ++generation.current;
+    void api.cancelListen();
+    player.current.stop();
+    rest(gen);
+  }, [rest]);
+
+  useEffect(() => {
+    document.documentElement.classList.add("orb");
+    void api.getConfig().then((c) => {
+      config.current = c;
+      if (c.orbAlwaysVisible) go("idle");
+    });
+    const unlisten = [
+      listen("aistar://hotkey", () => {
+        const p = phaseRef.current;
+        if (p === "hidden" || p === "idle") void run();
+        else cancel();
+      }),
+      listen("aistar://cancel", () => cancel()),
+      listen<number>("aistar://level", (e) => {
+        micLevel.current = e.payload;
+      }),
+      listen("aistar://recorded", () => {
+        if (phaseRef.current === "listening") go("thinking");
+      }),
+      listen<AppConfig>("aistar://config", (e) => {
+        config.current = e.payload;
+        const p = phaseRef.current;
+        if (e.payload.orbAlwaysVisible && p === "hidden") go("idle");
+        if (!e.payload.orbAlwaysVisible && p === "idle") rest(generation.current);
+      }),
+    ];
+    return () => unlisten.forEach((u) => void u.then((f) => f()));
+  }, [run, cancel, go, rest]);
+
+  return <Orb phase={phase} ref={stageRef} />;
+}
