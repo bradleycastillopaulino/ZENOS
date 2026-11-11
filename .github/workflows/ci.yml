@@ -46,3 +46,10 @@ jobs:
           name: AI-Star-instalador-windows
           path: src-tauri/target/release/bundle/nsis/*.exe
           if-no-files-found: error
+
+      - name: Publicar versión portable (sin instalar)
+        uses: actions/upload-artifact@v4
+        with:
+          name: AI-Star-portable-windows
+          path: src-tauri/target/release/ai-star.exe
+          if-no-files-found: error
