@@ -533,12 +533,13 @@ function Wizard({ initial, providers, onFinish }: { initial: AppConfig; provider
 
 // ------------------------------------------------------------------ panel
 
-type Page = "inicio" | "ia" | "voz" | "audio" | "apariencia" | "permisos" | "atajo" | "ayuda";
+type Page = "inicio" | "ia" | "voz" | "audio" | "texto" | "apariencia" | "permisos" | "atajo" | "ayuda";
 const PAGES: { id: Page; name: string }[] = [
   { id: "inicio", name: "Inicio" },
   { id: "ia", name: "Inteligencia" },
   { id: "voz", name: "Voz" },
   { id: "audio", name: "Audio" },
+  { id: "texto", name: "Texto" },
   { id: "apariencia", name: "Apariencia" },
   { id: "permisos", name: "Permisos" },
   { id: "atajo", name: "Atajo" },
@@ -556,6 +557,7 @@ function Panel({ initial, providers, rerun }: { initial: AppConfig; providers: P
   const [logFile, setLogFile] = useState("");
   const [showKey, setShowKey] = useState(false);
   const [aiNote, setAiNote] = useState<Note>(null);
+  const [hasMic, setHasMic] = useState(true);
 
   const refreshKeys = useCallback(() => {
     void api.keyStatus().then((l) => setKeys(Object.fromEntries(l.map((k) => [k.provider, k.saved]))));
@@ -564,6 +566,7 @@ function Panel({ initial, providers, rerun }: { initial: AppConfig; providers: P
     refreshKeys();
     void api.getAutostart().then(setAutostart);
     void api.logPath().then(setLogFile);
+    void api.hasMicrophone().then(setHasMic);
   }, [refreshKeys]);
 
   const info = providers.find((p) => p.id === cfg.provider);
@@ -716,6 +719,26 @@ function Panel({ initial, providers, rerun }: { initial: AppConfig; providers: P
             <>
               <h2>Audio</h2>
               <DevicePicker input={cfg.inputDevice} output={cfg.outputDevice} onChange={(i, o) => { set("inputDevice", i); set("outputDevice", o); }} />
+            </>
+          )}
+
+          {page === "texto" && (
+            <>
+              <h2>Texto</h2>
+              <label className="check">
+                <input type="checkbox" checked={cfg.readAlong} onChange={(e) => set("readAlong", e.target.checked)} />
+                <span>
+                  <b>Lectura:</b> muestra en un recuadro sobre el orbe lo que te dice ZENOS mientras habla
+                </span>
+              </label>
+              <label className="check">
+                <input type="checkbox" checked={cfg.typeMode || !hasMic} disabled={!hasMic} onChange={(e) => set("typeMode", e.target.checked)} />
+                <span>
+                  <b>Escritura:</b> el atajo abre un recuadro para escribirle a mano (Enter envía, Esc cierra)
+                </span>
+              </label>
+              {!hasMic && <div className="note info">No se detectó ningún micrófono, así que la escritura está activada automáticamente.</div>}
+              <p className="hint">Con la escritura activada, el recuadro tiene un botón de micrófono para hablar cuando quieras.</p>
             </>
           )}
 

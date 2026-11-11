@@ -22,6 +22,8 @@ export interface AppConfig {
   theme: string;
   orbScale: number;
   orbCorner: string;
+  readAlong: boolean;
+  typeMode: boolean;
   actionsEnabled: boolean;
   permissionLevel: "estricto" | "normal" | "libre";
   silenceMs: number;
@@ -70,6 +72,11 @@ export const api = {
   stopListen: () => invoke<void>("stop_listen"),
   getConfirm: () => invoke<ConfirmInfo | null>("get_confirm"),
   answerConfirm: (allow: boolean) => invoke<void>("answer_confirm", { allow }),
+  submitText: (text: string) => invoke<void>("submit_text", { text }),
+  startVoice: () => invoke<void>("start_voice"),
+  closeTypebox: () => invoke<void>("close_typebox"),
+  hideBubble: () => invoke<void>("hide_bubble"),
+  hasMicrophone: () => invoke<boolean>("has_microphone"),
   cancelListen: () => invoke<void>("cancel_listen"),
   ask: (text: string) => invoke<AskResult>("ask", { text }),
   testProvider: () => invoke<string>("test_provider"),

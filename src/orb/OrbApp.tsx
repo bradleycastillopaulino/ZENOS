@@ -44,14 +44,15 @@ export function OrbApp() {
     await api.speak(chunks);
   }, []);
 
-  const run = useCallback(async () => {
+  const run = useCallback(async (typed?: string) => {
     const gen = ++generation.current;
     window.clearTimeout(hideTimer.current);
     void api.setActive(true);
     micLevel.current = 0;
-    go("listening");
+    if (!typed) go("listening");
+    else go("thinking");
     try {
-      const heard = await api.listen();
+      const heard = typed ? ({ kind: "text", text: typed } as const) : await api.listen();
       if (gen !== generation.current) return;
       if (heard.kind !== "text") return rest(gen);
 
@@ -97,6 +98,14 @@ export function OrbApp() {
       }),
       listen("zenos://hotkey-up", () => {
         if (config.current?.hotkeyMode === "hold" && phaseRef.current === "listening") void api.stopListen();
+      }),
+      listen<string>("zenos://typed", (e) => {
+        const p = phaseRef.current;
+        if (p === "hidden" || p === "idle") void run(e.payload);
+      }),
+      listen("zenos://voice", () => {
+        const p = phaseRef.current;
+        if (p === "hidden" || p === "idle") void run();
       }),
       listen("zenos://wake", () => {
         const p = phaseRef.current;

@@ -9,7 +9,11 @@ const View =
     ? lazy(() => import("./settings/Settings").then((m) => ({ default: m.Settings })))
     : label === "confirm"
       ? lazy(() => import("./settings/Confirm").then((m) => ({ default: m.Confirm })))
-      : lazy(() => import("./orb/OrbApp").then((m) => ({ default: m.OrbApp })));
+      : label === "bubble"
+        ? lazy(() => import("./overlay/Overlay").then((m) => ({ default: m.Bubble })))
+        : label === "typebox"
+          ? lazy(() => import("./overlay/Overlay").then((m) => ({ default: m.TypeBox })))
+          : lazy(() => import("./orb/OrbApp").then((m) => ({ default: m.OrbApp })));
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

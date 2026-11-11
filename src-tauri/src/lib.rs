@@ -29,6 +29,11 @@ use config::AppConfig;
 const ORB: &str = "orb";
 const SETTINGS: &str = "settings";
 const CONFIRM: &str = "confirm";
+const BUBBLE: &str = "bubble";
+const TYPEBOX: &str = "typebox";
+const BUBBLE_W: f64 = 380.0;
+const BUBBLE_H: f64 = 230.0;
+const TYPE_H: f64 = 96.0;
 const ORB_BASE: f64 = 120.0;
 const HISTORY_TTL: Duration = Duration::from_secs(300);
 
@@ -97,10 +102,102 @@ fn show_orb(app: &AppHandle) {
     }
 }
 
+/// ¿El atajo abre el cuadro de escritura? (escritura activada, o no hay micrófono)
+fn typing_enabled(app: &AppHandle) -> bool {
+    app.state::<AppState>().config.lock().unwrap().type_mode || audio::input_names().is_empty()
+}
+
 fn trigger_assistant(app: &AppHandle) {
     log::write("atajo: activar asistente");
+    if typing_enabled(app) {
+        if app.get_webview_window(TYPEBOX).and_then(|w| w.is_visible().ok()).unwrap_or(false) {
+            hide_typebox(app);
+        } else {
+            open_typebox(app);
+        }
+        return;
+    }
     show_orb(app);
     let _ = app.emit_to(ORB, "zenos://hotkey", ());
+}
+
+// ------------------------------------------------------------------ recuadros sobre el orbe
+
+fn build_overlay(app: &AppHandle, label: &str, w: f64, h: f64, focusable: bool) {
+    let r = WebviewWindowBuilder::new(app, label, WebviewUrl::App("index.html".into()))
+        .title("ZENOS")
+        .inner_size(w, h)
+        .decorations(false)
+        .transparent(true)
+        .shadow(false)
+        .resizable(false)
+        .always_on_top(true)
+        .skip_taskbar(true)
+        .visible(false)
+        .focused(false)
+        .focusable(focusable)
+        .build();
+    if let Err(e) = r {
+        log::write(&format!("no se pudo crear la ventana {label}: {e}"));
+    }
+}
+
+/// Coloca una ventana junto al orbe: encima en las esquinas de abajo, debajo en las de arriba.
+fn place_near_orb(app: &AppHandle, label: &str, w: f64, h: f64, extra: f64) {
+    let (Some(orb), Some(win)) = (app.get_webview_window(ORB), app.get_webview_window(label)) else { return };
+    let corner = app.state::<AppState>().config.lock().unwrap().orb_corner.clone();
+    let (Ok(op), Ok(os)) = (orb.outer_position(), orb.outer_size()) else { return };
+    let sf = win.scale_factor().unwrap_or(1.0);
+    let (wp, hp, gap, ex) = ((w * sf) as i32, (h * sf) as i32, (6.0 * sf) as i32, (extra * sf) as i32);
+    let _ = win.set_size(tauri::PhysicalSize::new(wp as u32, hp as u32));
+    let x = if corner.ends_with('r') { op.x + os.width as i32 - wp } else { op.x };
+    let y = if corner.starts_with('b') { op.y - hp - gap - ex } else { op.y + os.height as i32 + gap + ex };
+    let _ = win.set_position(PhysicalPosition::new(x.max(0), y.max(0)));
+}
+
+fn typebox_visible(app: &AppHandle) -> bool {
+    app.get_webview_window(TYPEBOX).and_then(|w| w.is_visible().ok()).unwrap_or(false)
+}
+
+fn show_bubble(app: &AppHandle) {
+    let extra = if typebox_visible(app) { TYPE_H + 6.0 } else { 0.0 };
+    place_near_orb(app, BUBBLE, BUBBLE_W, BUBBLE_H, extra);
+    if let Some(w) = app.get_webview_window(BUBBLE) {
+        let _ = w.show();
+        let _ = w.set_ignore_cursor_events(true);
+    }
+}
+
+fn hide_bubble_window(app: &AppHandle) {
+    if let Some(w) = app.get_webview_window(BUBBLE) {
+        let _ = w.hide();
+    }
+}
+
+fn open_typebox(app: &AppHandle) {
+    place_near_orb(app, TYPEBOX, BUBBLE_W, TYPE_H, 0.0);
+    if let Some(w) = app.get_webview_window(TYPEBOX) {
+        let _ = w.show();
+        let _ = w.set_focus();
+    }
+    let _ = app.emit_to(TYPEBOX, "zenos://typebox-open", ());
+}
+
+fn hide_typebox(app: &AppHandle) {
+    if let Some(w) = app.get_webview_window(TYPEBOX) {
+        let _ = w.hide();
+    }
+}
+
+/// Envía una línea al recuadro de lectura (si la lectura está activada).
+fn bubble_emit(app: &AppHandle, kind: &str, text: &str) {
+    if !app.state::<AppState>().config.lock().unwrap().read_along {
+        return;
+    }
+    if kind != "end" {
+        show_bubble(app);
+    }
+    let _ = app.emit_to(BUBBLE, "zenos://bubble", serde_json::json!({ "kind": kind, "text": text }));
 }
 
 fn open_settings(app: &AppHandle) {
@@ -221,7 +318,7 @@ fn save_config(app: AppHandle, state: State<'_, AppState>, config: AppConfig) ->
     if wake_changed {
         wake::set_enabled(&app, config.wake_word);
     }
-    let _ = app.emit_to(ORB, "zenos://config", &config);
+    let _ = app.emit("zenos://config", &config);
     Ok(config)
 }
 
@@ -368,6 +465,7 @@ async fn ask(app: AppHandle, state: State<'_, AppState>, text: String) -> Result
     let key = secrets::get(provider.id)
         .ok_or_else(|| format!("Falta la clave de {}. Configúrala desde el icono de ZENOS.", provider.name))?;
 
+    bubble_emit(&app, "user", &text);
     let history = {
         let mut h = state.history.lock().unwrap();
         if h.1.elapsed() > HISTORY_TTL {
@@ -472,7 +570,7 @@ async fn speak_inner(
     let device = device.unwrap_or_else(|| c.output_device.clone());
     let app2 = app.clone();
     tauri::async_runtime::spawn_blocking(move || -> Result<(), String> {
-        let (tx, rx) = std::sync::mpsc::sync_channel::<Result<Vec<u8>, String>>(1);
+        let (tx, rx) = std::sync::mpsc::sync_channel::<(String, Result<Vec<u8>, String>)>(1);
         let stop_p = stop.clone();
         let (voice, language, rate) = (c.voice.clone(), c.language.clone(), c.voice_rate);
         std::thread::spawn(move || {
@@ -482,7 +580,7 @@ async fn speak_inner(
                 }
                 let r = tts::synthesize(&chunk, &voice, &language, rate);
                 let failed = r.is_err();
-                if tx.send(r).is_err() || failed {
+                if tx.send((chunk, r)).is_err() || failed {
                     break;
                 }
             }
@@ -491,7 +589,11 @@ async fn speak_inner(
             if stop.load(Ordering::SeqCst) {
                 break;
             }
-            let wav = item?;
+            let (chunk_text, wav) = item;
+            let wav = wav?;
+            if level_to.0 == ORB {
+                bubble_emit(&app2, "zenos", &chunk_text);
+            }
             let (samples, hz) = audio::playback::parse_wav(&wav)?;
             audio::playback::play(&samples, hz, &device, c.voice_volume as f32, &stop, |level| {
                 let _ = app2.emit_to(level_to.0, level_to.1, level);
@@ -509,7 +611,42 @@ async fn speak_inner(
 
 #[tauri::command]
 async fn speak(app: AppHandle, state: State<'_, AppState>, chunks: Vec<String>) -> Result<(), String> {
-    speak_inner(&app, &state, chunks, None, (ORB, "zenos://level")).await
+    let r = speak_inner(&app, &state, chunks, None, (ORB, "zenos://level")).await;
+    bubble_emit(&app, "end", "");
+    r
+}
+
+/// El usuario envió texto desde el cuadro de escritura.
+#[tauri::command]
+fn submit_text(app: AppHandle, text: String) {
+    hide_typebox(&app);
+    if !text.trim().is_empty() {
+        show_orb(&app);
+        let _ = app.emit_to(ORB, "zenos://typed", text.trim().to_string());
+    }
+}
+
+/// Desde el cuadro de escritura: hablar en vez de escribir.
+#[tauri::command]
+fn start_voice(app: AppHandle) {
+    hide_typebox(&app);
+    show_orb(&app);
+    let _ = app.emit_to(ORB, "zenos://voice", ());
+}
+
+#[tauri::command]
+fn close_typebox(app: AppHandle) {
+    hide_typebox(&app);
+}
+
+#[tauri::command]
+fn hide_bubble(app: AppHandle) {
+    hide_bubble_window(&app);
+}
+
+#[tauri::command]
+fn has_microphone() -> bool {
+    !audio::input_names().is_empty()
 }
 
 #[tauri::command]
@@ -705,7 +842,7 @@ fn toggle_orb_pinned(app: &AppHandle) {
     if config.orb_always_visible {
         show_orb(app);
     }
-    let _ = app.emit_to(ORB, "zenos://config", &config);
+    let _ = app.emit("zenos://config", &config);
 }
 
 fn build_tray(app: &AppHandle) -> tauri::Result<()> {
@@ -794,6 +931,8 @@ pub fn run() {
                 let _ = register_hotkey(&handle, &AppConfig::default().hotkey);
             }
             build_tray(&handle)?;
+            build_overlay(&handle, BUBBLE, BUBBLE_W, BUBBLE_H, false);
+            build_overlay(&handle, TYPEBOX, BUBBLE_W, TYPE_H, true);
 
             apply_orb_layout(&handle);
             if config.orb_always_visible {
@@ -812,7 +951,7 @@ pub fn run() {
         })
         .on_window_event(|window, event| {
             // La esfera nunca se destruye: solo se oculta.
-            if window.label() == ORB {
+            if matches!(window.label(), ORB | BUBBLE | TYPEBOX) {
                 if let WindowEvent::CloseRequested { api, .. } = event {
                     api.prevent_close();
                     let _ = window.hide();
@@ -839,6 +978,11 @@ pub fn run() {
             listen,
             cancel_listen,
             ask,
+            submit_text,
+            start_voice,
+            close_typebox,
+            hide_bubble,
+            has_microphone,
             stop_listen,
             get_confirm,
             answer_confirm,

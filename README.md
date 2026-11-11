@@ -64,6 +64,13 @@ Lo que se borra va a la **Papelera** (recuperable). Las carpetas de Windows, Arc
 
 Voces neuronales gratuitas con varios caracteres (Dalia, Dalia viva, Elvira, Elvira serena, Jorge, Álvaro, Elena, Salomé) y las voces instaladas en Windows. Las neuronales usan el servicio de lectura de Microsoft Edge, que es **no oficial**: si falla, ZENOS usa la voz de Windows automáticamente.
 
+## Lectura y escritura
+
+En Configuración → Texto:
+
+- **Lectura**: un recuadro sobre el orbe muestra lo que dices y lo que responde ZENOS mientras habla.
+- **Escritura**: el atajo abre un cuadro para escribirle a mano (Enter envía, Esc cierra; hay botón de micrófono para hablar). Si el equipo no tiene micrófono, se activa sola.
+
 ## Atajo y activación
 
 Atajo configurable en modo **pulsar** o **mantener pulsado**. Opcionalmente, di **«Oye Zenos»** (experimental: usa el reconocimiento local de Windows).

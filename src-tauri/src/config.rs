@@ -48,6 +48,10 @@ pub struct AppConfig {
     /// Esquina de la pantalla: br | bl | tr | tl
     pub orb_corner: String,
     /// El asistente puede abrir programas, manejar archivos y ejecutar comandos.
+    /// Lectura: muestra en un recuadro sobre el orbe lo que dice ZENOS.
+    pub read_along: bool,
+    /// Escritura: el atajo abre un recuadro para escribirle. Se activa sola si no hay micrófono.
+    pub type_mode: bool,
     pub actions_enabled: bool,
     /// "estricto" (confirma todo cambio) | "normal" (confirma borrar, sobrescribir y comandos) | "libre"
     pub permission_level: String,
@@ -84,6 +88,8 @@ impl Default for AppConfig {
             theme: "menta".into(),
             orb_scale: 1.0,
             orb_corner: "br".into(),
+            read_along: false,
+            type_mode: false,
             actions_enabled: true,
             permission_level: "normal".into(),
             silence_ms: 1200,
