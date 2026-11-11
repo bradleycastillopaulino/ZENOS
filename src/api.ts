@@ -17,6 +17,13 @@ export interface AppConfig {
   inputDevice: string;
   outputDevice: string;
   setupDone: boolean;
+  hotkeyMode: "toggle" | "hold";
+  wakeWord: boolean;
+  theme: string;
+  orbScale: number;
+  orbCorner: string;
+  actionsEnabled: boolean;
+  permissionLevel: "estricto" | "normal" | "libre";
   silenceMs: number;
   maxRecordMs: number;
   startTimeoutMs: number;
@@ -31,8 +38,15 @@ export interface ProviderInfo {
 }
 
 export interface Voice {
-  name: string;
+  id: string;
+  label: string;
   language: string;
+  kind: "neural" | "windows";
+}
+
+export interface ConfirmInfo {
+  text: string;
+  danger: boolean;
 }
 
 export interface ListenResult {
@@ -53,6 +67,9 @@ export const api = {
   setApiKey: (provider: string, key: string) => invoke<void>("set_api_key", { provider, key }),
   deleteApiKey: (provider: string) => invoke<void>("delete_api_key", { provider }),
   listen: () => invoke<ListenResult>("listen"),
+  stopListen: () => invoke<void>("stop_listen"),
+  getConfirm: () => invoke<ConfirmInfo | null>("get_confirm"),
+  answerConfirm: (allow: boolean) => invoke<void>("answer_confirm", { allow }),
   cancelListen: () => invoke<void>("cancel_listen"),
   ask: (text: string) => invoke<AskResult>("ask", { text }),
   testProvider: () => invoke<string>("test_provider"),

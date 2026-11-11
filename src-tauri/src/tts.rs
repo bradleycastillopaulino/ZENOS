@@ -1,13 +1,16 @@
-//! Síntesis de voz con el motor nativo de Windows (Windows.Media.SpeechSynthesis).
-//! Devuelve un WAV que el frontend reproduce y analiza para animar la esfera.
+//! Síntesis de voz: voces neuronales gratuitas (`neural`) con respaldo al motor de Windows
+//! (Windows.Media.SpeechSynthesis). Siempre devuelve un WAV que reproduce `audio::playback`.
 
 use serde::Serialize;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Voice {
-    pub name: String,
+    /// "edge:<persona>" (neuronal) o "win:<nombre>" (voz de Windows).
+    pub id: String,
+    pub label: String,
     pub language: String,
+    pub kind: &'static str,
 }
 
 #[cfg(windows)]
@@ -35,9 +38,12 @@ mod imp {
         Ok(voices
             .iter()
             .filter_map(|v| {
+                let name = v.DisplayName().ok()?.to_string();
                 Some(Voice {
-                    name: v.DisplayName().ok()?.to_string(),
+                    id: format!("win:{name}"),
+                    label: format!("{name} (voz de Windows)"),
                     language: v.Language().ok()?.to_string(),
+                    kind: "windows",
                 })
             })
             .collect())
@@ -91,7 +97,51 @@ mod imp {
     }
 }
 
-pub use imp::{list, synthesize};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{SystemTime, UNIX_EPOCH};
+
+/// Instante (s) hasta el que se evita el servicio neuronal tras un fallo.
+static NEURAL_DOWN_UNTIL: AtomicU64 = AtomicU64::new(0);
+
+fn now() -> u64 {
+    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
+}
+
+/// Todas las voces: neuronales primero y luego las de Windows.
+pub fn list() -> Result<Vec<Voice>, String> {
+    let mut out: Vec<Voice> = crate::neural::list()
+        .into_iter()
+        .map(|p| Voice { id: p.id, label: p.label, language: p.language, kind: "neural" })
+        .collect();
+    out.extend(imp::list().unwrap_or_default());
+    Ok(out)
+}
+
+/// `voice`: "" o "edge:<persona>" → neuronal con respaldo a Windows; "win:<nombre>" o un nombre antiguo → Windows.
+pub fn synthesize(text: &str, voice: &str, language: &str, rate: f64) -> Result<Vec<u8>, String> {
+    let (windows_name, neural_id) = if let Some(n) = voice.strip_prefix("win:") {
+        (n.to_string(), None)
+    } else if let Some(id) = voice.strip_prefix("edge:") {
+        (String::new(), Some(id.to_string()))
+    } else if voice.is_empty() {
+        (String::new(), Some(crate::neural::DEFAULT_PERSONA.to_string()))
+    } else {
+        (voice.to_string(), None) // configuración antigua: nombre de voz de Windows
+    };
+    if let Some(id) = neural_id {
+        if now() >= NEURAL_DOWN_UNTIL.load(Ordering::Relaxed) {
+            let extra = ((rate - 1.0) * 100.0).round() as i32;
+            match crate::neural::synthesize(text, &id, extra) {
+                Ok(wav) => return Ok(wav),
+                Err(e) => {
+                    crate::log::write(&format!("voz neuronal no disponible ({e}); se usa la voz de Windows"));
+                    NEURAL_DOWN_UNTIL.store(now() + 300, Ordering::Relaxed);
+                }
+            }
+        }
+    }
+    imp::synthesize(text, &windows_name, language, rate)
+}
 
 #[cfg(all(test, windows))]
 mod tests {
@@ -99,7 +149,7 @@ mod tests {
     fn windows_lists_voices_and_synthesizes_wav() {
         let voices = super::list().expect("listar voces");
         assert!(!voices.is_empty(), "Windows debe tener al menos una voz");
-        let wav = super::synthesize("Hola, soy ZENOS.", "", "es", 1.0).expect("sintetizar");
+        let wav = super::synthesize("Hola, soy ZENOS.", "win:", "es", 1.0).expect("sintetizar");
         assert_eq!(&wav[0..4], b"RIFF");
         assert!(wav.len() > 4000, "audio demasiado corto: {}", wav.len());
     }

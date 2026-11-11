@@ -23,6 +23,13 @@ serde_json = "1"
 reqwest = { version = "0.12", default-features = false, features = ["json", "multipart", "native-tls"] }
 keyring = { version = "3", features = ["windows-native"] }
 cpal = "0.15"
+dirs = "5"
+trash = "5"
+tokio = { version = "1", features = ["sync", "time"] }
+tokio-tungstenite = { version = "0.24", features = ["native-tls"] }
+futures-util = { version = "0.3", default-features = false, features = ["sink"] }
+sha2 = "0.10"
+uuid = { version = "1", features = ["v4"] }
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.62", features = [
@@ -32,6 +39,10 @@ windows = { version = "0.62", features = [
     "Foundation",
     "Foundation_Collections",
     "Win32_System_Com",
+    "Media_SpeechRecognition",
+    "Storage",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
 ] }
 
 [profile.release]

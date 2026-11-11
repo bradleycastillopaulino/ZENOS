@@ -2,10 +2,13 @@ mod ai;
 mod audio;
 mod config;
 mod log;
+mod neural;
 mod secrets;
 mod stt;
 mod text;
+mod tools;
 mod tts;
+mod wake;
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -25,6 +28,8 @@ use config::AppConfig;
 
 const ORB: &str = "orb";
 const SETTINGS: &str = "settings";
+const CONFIRM: &str = "confirm";
+const ORB_BASE: f64 = 120.0;
 const HISTORY_TTL: Duration = Duration::from_secs(300);
 
 pub struct AppState {
@@ -36,6 +41,13 @@ pub struct AppState {
     hotkey: Mutex<Option<Shortcut>>,
     listening: AtomicBool,
     speak_stop: Mutex<Arc<AtomicBool>>,
+    pending_confirm: Mutex<Option<PendingConfirm>>,
+}
+
+struct PendingConfirm {
+    text: String,
+    danger: bool,
+    tx: Option<tokio::sync::oneshot::Sender<bool>>,
 }
 
 fn escape_shortcut() -> Shortcut {
@@ -44,19 +56,41 @@ fn escape_shortcut() -> Shortcut {
 
 // ------------------------------------------------------------------ ventana de la esfera
 
-fn position_orb(win: &tauri::WebviewWindow) {
+fn position_orb(win: &tauri::WebviewWindow, scale: f64, corner: &str) {
     let monitor = win.primary_monitor().ok().flatten().or_else(|| win.current_monitor().ok().flatten());
-    let (Some(m), Ok(size)) = (monitor, win.outer_size()) else { return };
+    let Some(m) = monitor else { return };
+    let side = ORB_BASE * scale;
+    let _ = win.set_size(tauri::LogicalSize::new(side, side));
+    let Ok(size) = win.outer_size() else { return };
     let area = m.work_area();
     let margin = (16.0 * m.scale_factor()) as i32;
-    let x = area.position.x + area.size.width as i32 - size.width as i32 - margin;
-    let y = area.position.y + area.size.height as i32 - size.height as i32 - margin;
+    let right = area.position.x + area.size.width as i32 - size.width as i32 - margin;
+    let left = area.position.x + margin;
+    let bottom = area.position.y + area.size.height as i32 - size.height as i32 - margin;
+    let top = area.position.y + margin;
+    let (x, y) = match corner {
+        "bl" => (left, bottom),
+        "tr" => (right, top),
+        "tl" => (left, top),
+        _ => (right, bottom),
+    };
     let _ = win.set_position(PhysicalPosition::new(x, y));
 }
 
-fn show_orb(app: &AppHandle) {
+fn apply_orb_layout(app: &AppHandle) {
+    let (scale, corner) = {
+        let st = app.state::<AppState>();
+        let c = st.config.lock().unwrap();
+        (c.orb_scale, c.orb_corner.clone())
+    };
     if let Some(win) = app.get_webview_window(ORB) {
-        position_orb(&win);
+        position_orb(&win, scale, &corner);
+    }
+}
+
+fn show_orb(app: &AppHandle) {
+    apply_orb_layout(app);
+    if let Some(win) = app.get_webview_window(ORB) {
         let _ = win.show();
         let _ = win.set_always_on_top(true);
         let _ = win.set_ignore_cursor_events(true);
@@ -78,8 +112,8 @@ fn open_settings(app: &AppHandle) {
     }
     let result = WebviewWindowBuilder::new(app, SETTINGS, WebviewUrl::App("index.html".into()))
         .title("ZENOS")
-        .inner_size(520.0, 680.0)
-        .min_inner_size(460.0, 560.0)
+        .inner_size(780.0, 600.0)
+        .min_inner_size(700.0, 540.0)
         .center()
         .build();
     if let Err(e) = result {
@@ -110,17 +144,32 @@ fn register_hotkey(app: &AppHandle, text: &str) -> Result<(), String> {
 }
 
 fn on_shortcut(app: &AppHandle, shortcut: &Shortcut, event_state: ShortcutState) {
-    if event_state != ShortcutState::Pressed {
-        return;
-    }
     if *shortcut == escape_shortcut() {
-        let _ = app.emit_to(ORB, "zenos://cancel", ());
+        if event_state == ShortcutState::Pressed {
+            let _ = app.emit_to(ORB, "zenos://cancel", ());
+        }
         return;
     }
     let is_main = app.state::<AppState>().hotkey.lock().unwrap().as_ref() == Some(shortcut);
-    if is_main {
-        trigger_assistant(app);
+    if !is_main {
+        return;
     }
+    match event_state {
+        ShortcutState::Pressed => trigger_assistant(app),
+        ShortcutState::Released => {
+            let hold = app.state::<AppState>().config.lock().unwrap().hotkey_mode == "hold";
+            if hold {
+                let _ = app.emit_to(ORB, "zenos://hotkey-up", ());
+            }
+        }
+    }
+}
+
+#[allow(dead_code)] // solo se usa en Windows
+/// La palabra de activación solo inicia el asistente (nunca lo cancela).
+pub(crate) fn wake_trigger(app: &AppHandle) {
+    show_orb(app);
+    let _ = app.emit_to(ORB, "zenos://wake", ());
 }
 
 // ------------------------------------------------------------------ comandos
@@ -166,7 +215,12 @@ fn save_config(app: AppHandle, state: State<'_, AppState>, config: AppConfig) ->
     let config = config.sanitize();
     register_hotkey(&app, &config.hotkey)?;
     config::save(&state.config_dir, &config)?;
+    let wake_changed = state.config.lock().unwrap().wake_word != config.wake_word;
     *state.config.lock().unwrap() = config.clone();
+    apply_orb_layout(&app);
+    if wake_changed {
+        wake::set_enabled(&app, config.wake_word);
+    }
     let _ = app.emit_to(ORB, "zenos://config", &config);
     Ok(config)
 }
@@ -250,38 +304,132 @@ fn cancel_listen(state: State<'_, AppState>) {
     }
 }
 
+const MAX_STEPS: usize = 6;
+
+fn open_confirm(app: &AppHandle) {
+    if let Some(w) = app.get_webview_window(CONFIRM) {
+        let _ = w.close();
+    }
+    let r = WebviewWindowBuilder::new(app, CONFIRM, WebviewUrl::App("index.html".into()))
+        .title("ZENOS · Confirmar")
+        .inner_size(460.0, 300.0)
+        .resizable(false)
+        .minimizable(false)
+        .maximizable(false)
+        .always_on_top(true)
+        .center()
+        .build();
+    match r {
+        Ok(w) => {
+            let _ = w.set_focus();
+        }
+        Err(e) => log::write(&format!("no se pudo abrir la confirmación: {e}")),
+    }
+}
+
+/// Pide permiso al usuario con una ventana y espera hasta 60 s. Sin respuesta = no.
+async fn confirm_action(app: &AppHandle, state: &State<'_, AppState>, a: &tools::Action) -> bool {
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    *state.pending_confirm.lock().unwrap() =
+        Some(PendingConfirm { text: tools::describe(a), danger: tools::is_dangerous(a), tx: Some(tx) });
+    open_confirm(app);
+    let allowed = matches!(tokio::time::timeout(Duration::from_secs(60), rx).await, Ok(Ok(true)));
+    state.pending_confirm.lock().unwrap().take();
+    if let Some(w) = app.get_webview_window(CONFIRM) {
+        let _ = w.close();
+    }
+    allowed
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ConfirmInfo {
+    text: String,
+    danger: bool,
+}
+
 #[tauri::command]
-async fn ask(state: State<'_, AppState>, text: String) -> Result<AskResult, String> {
+fn get_confirm(state: State<'_, AppState>) -> Option<ConfirmInfo> {
+    state.pending_confirm.lock().unwrap().as_ref().map(|p| ConfirmInfo { text: p.text.clone(), danger: p.danger })
+}
+
+#[tauri::command]
+fn answer_confirm(state: State<'_, AppState>, allow: bool) {
+    let tx = state.pending_confirm.lock().unwrap().as_mut().and_then(|p| p.tx.take());
+    if let Some(tx) = tx {
+        let _ = tx.send(allow);
+    }
+}
+
+#[tauri::command]
+async fn ask(app: AppHandle, state: State<'_, AppState>, text: String) -> Result<AskResult, String> {
     let c = cfg(&state);
     let provider = ai::provider_info(&c.provider).ok_or("Proveedor no válido.")?;
     let key = secrets::get(provider.id)
         .ok_or_else(|| format!("Falta la clave de {}. Configúrala desde el icono de ZENOS.", provider.name))?;
 
-    let mut messages = {
+    let history = {
         let mut h = state.history.lock().unwrap();
         if h.1.elapsed() > HISTORY_TTL {
             h.0.clear();
         }
         h.0.clone()
     };
-    messages.push(ChatMessage { role: "user".into(), content: text });
+    let mut messages = history.clone();
+    messages.push(ChatMessage { role: "user".into(), content: text.clone() });
     let model = c.effective_model();
-    let answer = ai::chat(
-        &state.http,
-        provider,
-        &key,
-        ai::ChatRequest { model: &model, system: &c.system_prompt, messages: &messages, max_tokens: c.max_tokens },
-    )
-    .await?;
-    log::write(&format!("respuesta ({}/{model}): {answer}", provider.id));
+    let system = if c.actions_enabled { format!("{}{}", c.system_prompt, tools::PROMPT) } else { c.system_prompt.clone() };
 
-    messages.push(ChatMessage { role: "assistant".into(), content: answer.clone() });
+    let mut answer = String::new();
+    for step in 0..MAX_STEPS {
+        let raw = ai::chat(
+            &state.http,
+            provider,
+            &key,
+            ai::ChatRequest { model: &model, system: &system, messages: &messages, max_tokens: c.max_tokens },
+        )
+        .await?;
+        log::write(&format!("respuesta ({}/{model}) paso {step}: {raw}", provider.id));
+        let (visible, action) = if c.actions_enabled { tools::parse_action(&raw) } else { (raw.clone(), None) };
+        let Some(action) = action else {
+            answer = if visible.is_empty() { "Hecho.".to_string() } else { visible };
+            break;
+        };
+        let result = if tools::needs_confirm(&c.permission_level, &action) && !confirm_action(&app, &state, &action).await {
+            log::write(&format!("acción cancelada por el usuario: {}", tools::describe(&action)));
+            "El usuario NO autorizó esta acción. No la repitas; confirma que se canceló.".to_string()
+        } else {
+            log::write(&format!("acción: {}", tools::describe(&action)));
+            let a2 = action.clone();
+            match tauri::async_runtime::spawn_blocking(move || tools::run(&a2)).await.map_err(|e| e.to_string())? {
+                Ok(r) => r,
+                Err(e) => format!("ERROR: {e}"),
+            }
+        };
+        log::write(&format!("resultado: {result}"));
+        messages.push(ChatMessage { role: "assistant".into(), content: raw });
+        messages.push(ChatMessage { role: "user".into(), content: format!("RESULTADO DE LA ACCIÓN: {result}") });
+    }
+    if answer.is_empty() {
+        answer = "No pude completar la tarea en pocos pasos.".into();
+    }
+
+    let mut kept = history;
+    kept.push(ChatMessage { role: "user".into(), content: text });
+    kept.push(ChatMessage { role: "assistant".into(), content: answer.clone() });
     let keep = c.history_turns * 2;
-    let start = messages.len().saturating_sub(keep);
-    *state.history.lock().unwrap() = (messages[start..].to_vec(), Instant::now());
+    let start = kept.len().saturating_sub(keep);
+    *state.history.lock().unwrap() = (kept[start..].to_vec(), Instant::now());
 
     let chunks = text::speech_chunks(&text::clean_for_speech(&answer));
     Ok(AskResult { answer, chunks })
+}
+
+#[tauri::command]
+fn stop_listen(state: State<'_, AppState>) {
+    if let Some(c) = state.record.lock().unwrap().as_ref() {
+        c.stop.store(true, Ordering::SeqCst);
+    }
 }
 
 #[tauri::command]
@@ -637,6 +785,7 @@ pub fn run() {
                 hotkey: Mutex::new(None),
                 listening: AtomicBool::new(false),
                 speak_stop: Mutex::new(Arc::new(AtomicBool::new(false))),
+                pending_confirm: Mutex::new(None),
             });
 
             if let Err(e) = register_hotkey(&handle, &config.hotkey) {
@@ -646,11 +795,12 @@ pub fn run() {
             }
             build_tray(&handle)?;
 
-            if let Some(orb) = app.get_webview_window(ORB) {
-                position_orb(&orb);
-                if config.orb_always_visible {
-                    show_orb(&handle);
-                }
+            apply_orb_layout(&handle);
+            if config.orb_always_visible {
+                show_orb(&handle);
+            }
+            if config.wake_word {
+                wake::set_enabled(&handle, true);
             }
 
             let autostarted = std::env::args().any(|a| a == "--autostart");
@@ -668,6 +818,16 @@ pub fn run() {
                     let _ = window.hide();
                 }
             }
+            // Cerrar la ventana de confirmación sin responder = no autorizar.
+            if window.label() == CONFIRM {
+                if let WindowEvent::Destroyed = event {
+                    let state = window.app_handle().state::<AppState>();
+                    let tx = state.pending_confirm.lock().unwrap().as_mut().and_then(|p| p.tx.take());
+                    if let Some(tx) = tx {
+                        let _ = tx.send(false);
+                    }
+                }
+            }
         })
         .invoke_handler(tauri::generate_handler![
             get_config,
@@ -679,6 +839,9 @@ pub fn run() {
             listen,
             cancel_listen,
             ask,
+            stop_listen,
+            get_confirm,
+            answer_confirm,
             test_provider,
             reset_conversation,
             speak,

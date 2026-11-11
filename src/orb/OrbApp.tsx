@@ -12,7 +12,7 @@ const HIDE_DELAY_MS = 700;
 export function OrbApp() {
   const [phase, setPhase] = useState<Phase>("hidden");
   const phaseRef = useRef<Phase>("hidden");
-  const stageRef = useRef<HTMLDivElement>(null);
+  const [theme, setTheme] = useState("menta");
   const generation = useRef(0);
   const config = useRef<AppConfig | null>(null);
   const micLevel = useRef(0);
@@ -22,22 +22,6 @@ export function OrbApp() {
     phaseRef.current = p;
     setPhase(p);
   }, []);
-
-  // Animación del nivel: escribe --level directamente (sin re-render de React).
-  useEffect(() => {
-    let raf = 0;
-    let current = 0;
-    const tick = () => {
-      const p = phaseRef.current;
-      const target = p === "listening" || p === "speaking" ? micLevel.current : 0;
-      current += (target - current) * (target > current ? 0.45 : 0.12);
-      stageRef.current?.style.setProperty("--level", current.toFixed(3));
-      raf = p === "hidden" && current < 0.001 ? 0 : requestAnimationFrame(tick);
-      if (!raf) stageRef.current?.style.setProperty("--level", "0");
-    };
-    if (phase !== "hidden") raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [phase]);
 
   const rest = useCallback(
     (gen: number) => {
@@ -102,13 +86,21 @@ export function OrbApp() {
     document.documentElement.classList.add("orb");
     void api.getConfig().then((c) => {
       config.current = c;
+      setTheme(c.theme);
       if (c.orbAlwaysVisible) go("idle");
     });
     const unlisten = [
       listen("zenos://hotkey", () => {
         const p = phaseRef.current;
         if (p === "hidden" || p === "idle") void run();
-        else cancel();
+        else if (config.current?.hotkeyMode !== "hold") cancel();
+      }),
+      listen("zenos://hotkey-up", () => {
+        if (config.current?.hotkeyMode === "hold" && phaseRef.current === "listening") void api.stopListen();
+      }),
+      listen("zenos://wake", () => {
+        const p = phaseRef.current;
+        if (p === "hidden" || p === "idle") void run();
       }),
       listen("zenos://cancel", () => cancel()),
       listen<number>("zenos://level", (e) => {
@@ -119,6 +111,7 @@ export function OrbApp() {
       }),
       listen<AppConfig>("zenos://config", (e) => {
         config.current = e.payload;
+        setTheme(e.payload.theme);
         const p = phaseRef.current;
         if (e.payload.orbAlwaysVisible && p === "hidden") go("idle");
         if (!e.payload.orbAlwaysVisible && p === "idle") rest(generation.current);
@@ -127,5 +120,5 @@ export function OrbApp() {
     return () => unlisten.forEach((u) => void u.then((f) => f()));
   }, [run, cancel, go, rest]);
 
-  return <Orb phase={phase} ref={stageRef} />;
+  return <Orb phase={phase} theme={theme} level={micLevel} />;
 }

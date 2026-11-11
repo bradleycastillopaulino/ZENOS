@@ -1,6 +1,6 @@
 # ZENOS
 
-Asistente de voz para Windows 11. Una pequeña esfera oscura y abstracta flota en la esquina inferior derecha: pulsas **Ctrl + Alt + Espacio**, hablas en español y te responde en voz alta con la IA que elijas.
+Asistente de voz para Windows 11. Un orbe geométrico dibujado a mano flota en la esquina inferior derecha: pulsas **Ctrl + Alt + Espacio**, hablas en español y te responde en voz alta con la IA que elijas.
 
 - Sin ventanas ni paneles: solo la esfera, transparente y sin bordes.
 - Proveedores: **OpenAI, Anthropic Claude, Google Gemini, Groq, DeepSeek y OpenRouter**.
@@ -36,13 +36,37 @@ Si usas Groq para ambas cosas, con **una sola clave** es suficiente.
 | Mostrar u ocultar la esfera en reposo | Menú del icono → *Mostrar / ocultar esfera* |
 | Salir | Menú del icono → *Salir de ZENOS* |
 
-La esfera cambia de color y movimiento según lo que hace:
+El orbe es un círculo de trazo grueso que gira y se transforma entre formas geométricas:
 
-- **En espera**: brillo tenue y movimiento lento.
-- **Escuchando** (cian): reacciona al volumen de tu voz.
-- **Procesando** (violeta): anillos girando más rápido.
-- **Hablando** (magenta): late con la voz.
-- **Error** (rojo/naranja): te dice qué falta, por ejemplo una clave.
+- **En espera**: gira despacio.
+- **Escuchando**: pulsa con el volumen de tu voz.
+- **Procesando**: gira rápido y le orbitan chispas.
+- **Hablando**: late con la voz.
+- **Error**: se queda cuadrado y tiembla.
+
+Cinco temas de color (menta, uva, mandarina, chicle, cielo), tamaño y esquina de la pantalla configurables.
+
+## Control del PC
+
+El asistente puede **abrir programas y páginas, crear carpetas, listar y leer archivos, escribir, mover y copiar, enviar a la Papelera y ejecutar comandos de PowerShell**. Ejemplos: «abre la calculadora», «crea una carpeta Proyectos en el escritorio», «borra la carpeta Pruebas».
+
+Niveles de permiso (Configuración → Permisos):
+
+| Nivel | Pregunta antes de… |
+|---|---|
+| Estricto | cualquier cambio (abrir, crear, mover, escribir, borrar, comandos) |
+| **Normal** (por defecto) | borrar, sobrescribir archivos y ejecutar comandos |
+| Libre | nada |
+
+Lo que se borra va a la **Papelera** (recuperable). Las carpetas de Windows, Archivos de programa, la raíz de las unidades y tus carpetas personales completas están **siempre protegidas**. La confirmación es una ventana con botones; cerrarla o no responder en 60 s cancela la acción. Puedes desactivar todo esto y dejar solo la conversación.
+
+## Voces
+
+Voces neuronales gratuitas con varios caracteres (Dalia, Dalia viva, Elvira, Elvira serena, Jorge, Álvaro, Elena, Salomé) y las voces instaladas en Windows. Las neuronales usan el servicio de lectura de Microsoft Edge, que es **no oficial**: si falla, ZENOS usa la voz de Windows automáticamente.
+
+## Atajo y activación
+
+Atajo configurable en modo **pulsar** o **mantener pulsado**. Opcionalmente, di **«Oye Zenos»** (experimental: usa el reconocimiento local de Windows).
 
 La conversación recuerda los últimos turnos durante 5 minutos, así que puedes hacer preguntas de seguimiento.
 
@@ -93,7 +117,8 @@ cargo test --manifest-path src-tauri/Cargo.toml
 src/                     Interfaz (React + TypeScript + Vite)
   orb/                   Esfera: Orb.tsx (estructura), orb.css (animaciones), OrbApp.tsx (ciclo)
   settings/              Ventana de configuración
-  (la voz se reproduce en Rust con cpal: src-tauri/src/audio/playback.rs)
+  (la voz se reproduce en Rust con cpal: src-tauri/src/audio/playback.rs;
+   acciones del PC: src-tauri/src/tools.rs; voces: neural.rs y tts.rs; palabra de activación: wake.rs)
 src-tauri/src/           Núcleo nativo (Rust)
   lib.rs                 Ventanas, bandeja, atajo global y comandos
   audio/                 Micrófono (cpal), detección de voz y WAV

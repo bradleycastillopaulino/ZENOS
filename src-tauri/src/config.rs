@@ -37,6 +37,20 @@ pub struct AppConfig {
     pub output_device: String,
     /// El asistente de configuración inicial ya se completó.
     pub setup_done: bool,
+    /// "toggle" (pulsar para empezar/parar) | "hold" (mantener pulsado para hablar)
+    pub hotkey_mode: String,
+    /// Activar con la frase «Oye Zenos» (experimental, usa el reconocimiento de Windows).
+    pub wake_word: bool,
+    /// Tema de color de la esfera: menta | uva | mandarina | chicle | cielo
+    pub theme: String,
+    /// Escala de la esfera (0.7 - 1.8).
+    pub orb_scale: f64,
+    /// Esquina de la pantalla: br | bl | tr | tl
+    pub orb_corner: String,
+    /// El asistente puede abrir programas, manejar archivos y ejecutar comandos.
+    pub actions_enabled: bool,
+    /// "estricto" (confirma todo cambio) | "normal" (confirma borrar, sobrescribir y comandos) | "libre"
+    pub permission_level: String,
     // Detección de voz
     pub silence_ms: u32,
     pub max_record_ms: u32,
@@ -65,6 +79,13 @@ impl Default for AppConfig {
             input_device: String::new(),
             output_device: String::new(),
             setup_done: false,
+            hotkey_mode: "toggle".into(),
+            wake_word: false,
+            theme: "menta".into(),
+            orb_scale: 1.0,
+            orb_corner: "br".into(),
+            actions_enabled: true,
+            permission_level: "normal".into(),
             silence_ms: 1200,
             max_record_ms: 30_000,
             start_timeout_ms: 7_000,
@@ -105,6 +126,19 @@ impl AppConfig {
         if self.hotkey.trim().is_empty() {
             self.hotkey = d.hotkey;
         }
+        if !matches!(self.hotkey_mode.as_str(), "toggle" | "hold") {
+            self.hotkey_mode = d.hotkey_mode;
+        }
+        if !matches!(self.theme.as_str(), "menta" | "uva" | "mandarina" | "chicle" | "cielo") {
+            self.theme = d.theme;
+        }
+        if !matches!(self.orb_corner.as_str(), "br" | "bl" | "tr" | "tl") {
+            self.orb_corner = d.orb_corner;
+        }
+        if !matches!(self.permission_level.as_str(), "estricto" | "normal" | "libre") {
+            self.permission_level = d.permission_level;
+        }
+        self.orb_scale = self.orb_scale.clamp(0.7, 1.8);
         self.voice_rate = self.voice_rate.clamp(0.5, 2.0);
         self.voice_volume = self.voice_volume.clamp(0.0, 1.0);
         self.silence_ms = self.silence_ms.clamp(400, 5000);
@@ -152,6 +186,10 @@ mod tests {
         assert_eq!(c.provider, "anthropic");
         assert_eq!(c.voice_rate, 2.0);
         assert_eq!(c.hotkey, "Ctrl+Alt+Space");
+        let c: AppConfig = serde_json::from_str(r#"{"theme":"x","orbCorner":"zz","permissionLevel":"?","orbScale":9}"#).unwrap();
+        let c = c.sanitize();
+        assert_eq!((c.theme.as_str(), c.orb_corner.as_str(), c.permission_level.as_str()), ("menta", "br", "normal"));
+        assert_eq!(c.orb_scale, 1.8);
     }
 
     #[test]
