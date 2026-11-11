@@ -434,10 +434,10 @@ function Orbita({ phase, theme, level, sw }: AvatarProps) {
 // ------------------------------------------------------------------ selección
 
 export const AVATARS: { id: string; name: string; text: string }[] = [
-  { id: "formas", name: "Formas", text: "Un círculo que gira y cambia de forma" },
-  { id: "gelatina", name: "Gelatina", text: "Una criatura con ojos que parpadean" },
-  { id: "pulso", name: "Pulso", text: "Un ecualizador que late con tu voz" },
-  { id: "orbita", name: "Órbita", text: "Un planeta con una luna que gira" },
+  { id: "formas", name: "Formas", text: "Analítica · «Veamos los datos»" },
+  { id: "gelatina", name: "Gelatina", text: "Divertida y optimista · «Eso estuvo de cabra»" },
+  { id: "pulso", name: "Pulso", text: "Cálida · «Con calma, paso a paso»" },
+  { id: "orbita", name: "Órbita", text: "Creativa · «¿Y si…?»" },
 ];
 
 /** Avatar de ZENOS. `level` (0..1) es el volumen del micrófono o de la voz; se lee en cada fotograma. */

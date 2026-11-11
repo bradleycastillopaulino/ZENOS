@@ -22,6 +22,7 @@ export interface AppConfig {
   theme: string;
   uiTheme: string;
   avatar: string;
+  personality: boolean;
   readSize: number;
   orbScale: number;
   orbCorner: string;

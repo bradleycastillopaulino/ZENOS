@@ -795,6 +795,10 @@ function Panel({ initial, providers, rerun }: { initial: AppConfig; providers: P
               <div className="field">
                 <label>Avatar</label>
                 <AvatarPicker value={cfg.avatar} theme={cfg.theme} onChange={(a) => set("avatar", a)} />
+                <label className="check">
+                  <input type="checkbox" checked={cfg.personality} onChange={(e) => set("personality", e.target.checked)} />
+                  <span>Hablar con la personalidad del avatar (humor, muletillas y estilo propio)</span>
+                </label>
               </div>
               <div className="field">
                 <label>Color</label>

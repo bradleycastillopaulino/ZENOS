@@ -79,6 +79,19 @@ Lo que se borra va a la **Papelera** (recuperable). Las carpetas de Windows, Arc
 
 Voces neuronales gratuitas con varios caracteres (Dalia, Dalia viva, Elvira, Elvira serena, Jorge, Álvaro, Elena, Salomé) y las voces instaladas en Windows. Las neuronales usan el servicio de lectura de Microsoft Edge, que es **no oficial**: si falla, ZENOS usa la voz de Windows automáticamente.
 
+## Avatares y personalidad
+
+Puedes elegir entre cuatro avatares en **Apariencia → Esfera**, y cada uno habla con su propia personalidad (se puede desactivar en la misma página):
+
+| Avatar | Personalidad | Estilo |
+|---|---|---|
+| **Formas** | Analítica | Conclusión primero, datos, humor seco y preciso |
+| **Gelatina** | Divertida y optimista | Chistes ligeros, energía contagiosa, «eso estuvo de cabra» |
+| **Órbita** | Creativa | Ideas, analogías y un camino seguro y otro atrevido |
+| **Pulso** | Cálida | Calma, cercanía y algún refrán |
+
+Todos comparten el mismo contexto: ZENOS lo creó **Bradley Castillo, «la cabra»**, y ayuda con preguntas, curiosidades y tareas básicas de Windows. Los textos están en `src-tauri/src/persona.rs`. Los datos de contexto no incluyen internet ni la hora: ZENOS no navega ni ve la pantalla.
+
 ## Lectura y escritura
 
 En Configuración → Texto:

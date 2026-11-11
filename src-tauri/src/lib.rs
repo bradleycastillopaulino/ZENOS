@@ -3,6 +3,7 @@ mod audio;
 mod config;
 mod log;
 mod neural;
+mod persona;
 mod secrets;
 mod stt;
 mod text;
@@ -484,7 +485,8 @@ async fn ask(app: AppHandle, state: State<'_, AppState>, text: String) -> Result
     let mut messages = history.clone();
     messages.push(ChatMessage { role: "user".into(), content: text.clone() });
     let model = c.effective_model();
-    let system = if c.actions_enabled { format!("{}{}", c.system_prompt, tools::PROMPT) } else { c.system_prompt.clone() };
+    let base = persona::system_prompt(&c);
+    let system = if c.actions_enabled { format!("{}{}", base, tools::PROMPT) } else { base };
 
     let mut answer = String::new();
     let mut tainted = false; // ya se leyó contenido de archivos o carpetas en esta conversación

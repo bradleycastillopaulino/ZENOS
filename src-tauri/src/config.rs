@@ -47,6 +47,8 @@ pub struct AppConfig {
     pub ui_theme: String,
     /// Avatar de la esfera: formas | gelatina | pulso | orbita
     pub avatar: String,
+    /// Hablar con la personalidad del avatar (humor, muletillas y estilo propios).
+    pub personality: bool,
     /// Tamaño del texto del recuadro de lectura (0.8 - 2.0).
     pub read_size: f64,
     /// Escala de la esfera (0.7 - 1.8).
@@ -94,6 +96,7 @@ impl Default for AppConfig {
             theme: "menta".into(),
             ui_theme: "crema".into(),
             avatar: "formas".into(),
+            personality: true,
             read_size: 1.0,
             orb_scale: 1.0,
             orb_corner: "br".into(),
