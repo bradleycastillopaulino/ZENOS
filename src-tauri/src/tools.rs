@@ -134,39 +134,116 @@ pub fn resolve(input: &str) -> PathBuf {
     }
 }
 
-/// Lugares que nunca se modifican: sistema, programas, raíz de unidad y carpetas personales completas.
-pub fn is_protected(path: &Path) -> bool {
-    let p = normalize(path);
+fn lowslash(p: &Path) -> String {
+    p.to_string_lossy().to_lowercase().replace('\\', "/")
+}
+
+/// Quita el prefijo `\\?\` que añade Windows al resolver rutas.
+fn strip_verbatim(p: PathBuf) -> PathBuf {
+    let s = p.to_string_lossy().to_string();
+    if let Some(rest) = s.strip_prefix(r"\\?\UNC\") {
+        PathBuf::from(format!(r"\\{rest}"))
+    } else if let Some(rest) = s.strip_prefix(r"\\?\") {
+        PathBuf::from(rest)
+    } else {
+        p
+    }
+}
+
+/// Ruta real: sigue enlaces simbólicos, uniones (junctions) y nombres cortos (`PROGRA~1`).
+/// Si la ruta aún no existe se resuelve su ancestro existente más cercano y se le añade el resto.
+/// Devuelve `None` si hay un enlace roto (no se sabe adónde escribiría).
+fn real_path(p: &Path) -> Option<PathBuf> {
+    let mut tail: Vec<std::ffi::OsString> = Vec::new();
+    let mut cur = p.to_path_buf();
+    loop {
+        match std::fs::canonicalize(&cur) {
+            Ok(c) => {
+                let mut out = strip_verbatim(c);
+                for t in tail.iter().rev() {
+                    out.push(t);
+                }
+                return Some(out);
+            }
+            Err(_) => {
+                // Un enlace roto existe como enlace pero no se puede resolver.
+                if std::fs::symlink_metadata(&cur).is_ok() {
+                    return None;
+                }
+                match (cur.file_name().map(|n| n.to_os_string()), cur.parent()) {
+                    (Some(name), Some(parent)) => {
+                        tail.push(name);
+                        cur = parent.to_path_buf();
+                    }
+                    _ => return Some(p.to_path_buf()),
+                }
+            }
+        }
+    }
+}
+
+/// ¿Es la propia ruta un enlace simbólico o una unión?
+fn is_link(p: &Path) -> bool {
+    std::fs::symlink_metadata(p).map(|m| m.file_type().is_symlink()).unwrap_or(false)
+}
+
+/// Carpetas que se protegen enteras (con todo lo que contienen) y carpetas protegidas solo ellas mismas.
+fn protected_sets() -> (Vec<String>, Vec<String>) {
+    let mut exact: Vec<PathBuf> = vec![home()];
+    for n in ["escritorio", "documentos", "descargas", "imagenes", "musica", "videos"] {
+        if let Some(d) = alias_dir(n) {
+            exact.push(d);
+        }
+    }
+    let mut tree: Vec<PathBuf> = Vec::new();
+    // Carpetas donde un programa se ejecuta solo al iniciar sesión (persistencia).
+    if let Ok(appdata) = std::env::var("APPDATA") {
+        tree.push(PathBuf::from(appdata).join("Microsoft/Windows/Start Menu"));
+    }
+    for var in ["WINDIR", "ProgramFiles", "ProgramFiles(x86)", "ProgramData"] {
+        if let Ok(v) = std::env::var(var) {
+            if !v.is_empty() {
+                tree.push(PathBuf::from(v));
+            }
+        }
+    }
+    // Cada carpeta se compara tanto por su ruta escrita como por su ruta real
+    // (p. ej. Documentos redirigida a OneDrive).
+    let both = |v: Vec<PathBuf>| -> Vec<String> {
+        let mut out = Vec::new();
+        for p in v {
+            out.push(lowslash(&p));
+            if let Some(r) = real_path(&p) {
+                out.push(lowslash(&r));
+            }
+        }
+        out
+    };
+    (both(exact), both(tree))
+}
+
+fn hits_protected(p: &Path, exact: &[String], tree: &[String]) -> bool {
+    let p = normalize(p);
     let comps = p.components().filter(|c| !matches!(c, Component::Prefix(_) | Component::RootDir)).count();
     if comps == 0 {
         return true;
     }
-    let low = p.to_string_lossy().to_lowercase().replace('\\', "/");
-    let mut roots: Vec<PathBuf> = vec![home()];
-    for n in ["escritorio", "documentos", "descargas", "imagenes", "musica", "videos"] {
-        if let Some(d) = alias_dir(n) {
-            roots.push(d);
-        }
-    }
-    if roots.iter().any(|r| r.to_string_lossy().to_lowercase().replace('\\', "/") == low) {
+    let low = lowslash(&p);
+    exact.iter().any(|r| *r == low) || tree.iter().any(|v| !v.is_empty() && (low == *v || low.starts_with(&format!("{v}/"))))
+}
+
+/// Lugares que nunca se modifican: sistema, programas, raíz de unidad y carpetas personales completas.
+/// Se mira la ruta tal como se escribió y también su destino real, para que un enlace simbólico o
+/// una unión dentro de una carpeta permitida no pueda apuntar a una zona protegida.
+pub fn is_protected(path: &Path) -> bool {
+    let (exact, tree) = protected_sets();
+    if hits_protected(path, &exact, &tree) {
         return true;
     }
-    // Carpetas donde un programa se ejecuta solo al iniciar sesión (persistencia).
-    if let Ok(appdata) = std::env::var("APPDATA") {
-        let startup = appdata.to_lowercase().replace('\\', "/") + "/microsoft/windows/start menu";
-        if low == startup || low.starts_with(&format!("{startup}/")) {
-            return true;
-        }
+    match real_path(&normalize(path)) {
+        Some(real) => hits_protected(&real, &exact, &tree),
+        None => true,
     }
-    for var in ["WINDIR", "ProgramFiles", "ProgramFiles(x86)", "ProgramData"] {
-        if let Ok(v) = std::env::var(var) {
-            let v = v.to_lowercase().replace('\\', "/");
-            if !v.is_empty() && (low == v || low.starts_with(&format!("{v}/"))) {
-                return true;
-            }
-        }
-    }
-    false
 }
 
 // ------------------------------------------------------------------ permisos
@@ -332,8 +409,14 @@ pub fn run(a: &Action) -> Result<String, String> {
             if !from.exists() {
                 return Err("El origen no existe.".into());
             }
+            if a.tool == "mover" && is_link(&from) {
+                return Err("No muevo enlaces simbólicos ni uniones.".into());
+            }
             // Si el destino es una carpeta existente, se coloca dentro.
             let to = if to.is_dir() { to.join(from.file_name().unwrap_or_default()) } else { to };
+            if is_protected(&to) || is_link(&to) {
+                return Err("Esa ubicación está protegida.".into());
+            }
             if let Some(dir) = to.parent() {
                 std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
             }
@@ -350,6 +433,9 @@ pub fn run(a: &Action) -> Result<String, String> {
             if is_protected(&p) {
                 return Err("Esa ubicación está protegida y no se puede borrar.".into());
             }
+            if is_link(&p) {
+                return Err("Esa ruta es un enlace simbólico o una unión; no la borro.".into());
+            }
             if !p.exists() {
                 return Err("No existe esa ruta.".into());
             }
@@ -362,6 +448,9 @@ pub fn run(a: &Action) -> Result<String, String> {
 }
 
 fn copy_any(from: &Path, to: &Path) -> Result<(), String> {
+    if is_link(from) {
+        return Err(format!("{} es un enlace simbólico o una unión; no se copia.", from.display()));
+    }
     if from.is_dir() {
         std::fs::create_dir_all(to).map_err(|e| e.to_string())?;
         for entry in std::fs::read_dir(from).map_err(|e| e.to_string())?.flatten() {
@@ -573,6 +662,97 @@ mod tests {
         assert!(base.join("c.txt").exists() && !base.join("a/hola.txt").exists());
         assert!(run(&act("borrar", json!({"ruta": "/"}))).is_err());
         assert!(run(&act("desconocida", Value::Null)).is_err());
+        let _ = std::fs::remove_dir_all(base);
+    }
+
+    /// Crea un enlace de carpeta: simbólico en Unix, unión (no requiere administrador) en Windows.
+    fn make_dir_link(link: &Path, target: &Path) {
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(target, link).unwrap();
+        #[cfg(windows)]
+        {
+            let st = std::process::Command::new("cmd")
+                .args(["/C", "mklink", "/J"])
+                .arg(link)
+                .arg(target)
+                .output()
+                .unwrap();
+            assert!(st.status.success(), "mklink falló: {}", String::from_utf8_lossy(&st.stdout));
+        }
+    }
+
+    #[test]
+    fn links_cannot_reach_protected_places() {
+        let base = std::env::temp_dir().join(format!("zenos-links-{}", std::process::id()));
+        let prot = base.join("sistema");
+        let libre = base.join("libre");
+        std::fs::create_dir_all(&prot).unwrap();
+        std::fs::create_dir_all(&libre).unwrap();
+        std::fs::write(prot.join("clave.txt"), "x").unwrap();
+        std::env::set_var("ZENOS_TEST_PROT", &prot);
+        // WINDIR sirve aquí como «zona del sistema» de prueba.
+        let old = std::env::var("WINDIR").ok();
+        std::env::set_var("WINDIR", &prot);
+
+        let link = libre.join("atajo");
+        make_dir_link(&link, &prot);
+        // La ruta escrita parece libre, pero su destino real está protegido.
+        assert!(is_protected(&link));
+        assert!(is_protected(&link.join("clave.txt")));
+        assert!(is_protected(&link.join("nuevo/deep.txt")));
+        // Las acciones lo rechazan y no tocan nada.
+        let l = link.to_string_lossy().to_string();
+        assert!(run(&act("escribir", json!({"ruta": format!("{l}/nuevo.txt"), "contenido":"x"}))).is_err());
+        assert!(run(&act("crear_carpeta", json!({"ruta": format!("{l}/sub")}))).is_err());
+        assert!(run(&act("borrar", json!({"ruta": format!("{l}/clave.txt")}))).is_err());
+        assert!(prot.join("clave.txt").exists() && !prot.join("nuevo.txt").exists() && !prot.join("sub").exists());
+        // Mover o copiar hacia el enlace también.
+        std::fs::write(libre.join("a.txt"), "a").unwrap();
+        let src = libre.join("a.txt").to_string_lossy().to_string();
+        assert!(run(&act("mover", json!({"origen": src, "destino": l}))).is_err());
+        assert!(run(&act("copiar", json!({"origen": src, "destino": format!("{l}/b.txt")}))).is_err());
+        assert!(!prot.join("a.txt").exists() && !prot.join("b.txt").exists());
+
+        // Un enlace a una zona NO protegida se puede usar, pero el enlace en sí no se borra ni se mueve.
+        let otro = base.join("otro");
+        std::fs::create_dir_all(&otro).unwrap();
+        let ok = libre.join("hacia-otro");
+        make_dir_link(&ok, &otro);
+        assert!(!is_protected(&ok.join("f.txt")));
+        assert!(run(&act("borrar", json!({"ruta": ok.to_string_lossy()}))).is_err());
+        assert!(run(&act("mover", json!({"origen": ok.to_string_lossy(), "destino": libre.join("x").to_string_lossy()}))).is_err());
+        assert!(ok.exists());
+        // Copiar una carpeta que contiene un enlace se rechaza (evita bucles y fugas).
+        assert!(run(&act("copiar", json!({"origen": libre.to_string_lossy(), "destino": base.join("copia").to_string_lossy()}))).is_err());
+
+        match old {
+            Some(v) => std::env::set_var("WINDIR", v),
+            None => std::env::remove_var("WINDIR"),
+        }
+        std::env::remove_var("ZENOS_TEST_PROT");
+        // Quitar enlaces sin seguirlos antes de limpiar.
+        #[cfg(unix)]
+        {
+            let _ = std::fs::remove_file(&link);
+            let _ = std::fs::remove_file(&ok);
+        }
+        #[cfg(windows)]
+        {
+            let _ = std::fs::remove_dir(&link);
+            let _ = std::fs::remove_dir(&ok);
+        }
+        let _ = std::fs::remove_dir_all(base);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn dangling_links_are_rejected() {
+        let base = std::env::temp_dir().join(format!("zenos-dangling-{}", std::process::id()));
+        std::fs::create_dir_all(&base).unwrap();
+        let broken = base.join("roto");
+        std::os::unix::fs::symlink(base.join("no-existe"), &broken).unwrap();
+        assert!(is_protected(&broken));
+        assert!(is_protected(&broken.join("x.txt")));
         let _ = std::fs::remove_dir_all(base);
     }
 
